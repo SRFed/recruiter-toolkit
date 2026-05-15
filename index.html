@@ -407,7 +407,7 @@ async function generateOutreach(){
   document.getElementById('o-loading').style.display='block';
   document.getElementById('outreach-result').style.display='none';
   try {
-    const res=await fetch('/.netlify/functions/outreach',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({model:'claude-sonnet-4-20250514',max_tokens:1000,messages:[{role:'user',content:prompt}]})});
+    const res=await fetch('/.netlify/functions/outreach',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({model:'claude-sonnet-4-5',max_tokens:1000,messages:[{role:'user',content:prompt}]})});
     const data=await res.json();
     if(data.error){toast('Error: '+data.error.message);document.getElementById('o-loading').style.display='none';return;}
     document.getElementById('outreach-output').textContent=(data.content||[]).map(b=>b.text||'').join('');
