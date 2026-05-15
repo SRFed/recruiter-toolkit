@@ -1,0 +1,444 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Recruiter Toolkit — South River Federal Solutions</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:ital,wght@0,400;0,500;1,400&family=Syne:wght@400;600;700;800&display=swap" rel="stylesheet" />
+<script src="https://alcdn.msauth.net/browser/2.38.1/js/msal-browser.min.js"></script>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+:root {
+  --bg: #0a0f1e; --surface: #0f1629; --surface2: #1e2e50; --surface3: #263660;
+  --border: #2a3f6f; --border2: #3a5080; --accent: #005FD5; --accent-light: #1a72e8;
+  --accent-pale: #0a2a5e; --text: #e8edf8; --text2: #b0bdd8; --text3: #7a8fbb;
+  --danger: #ff5a6e; --warning: #f5a623; --info: #5ab4ff; --success: #3ef5a0;
+  --radius: 8px; --radius-lg: 12px;
+}
+body { background: var(--bg); color: var(--text); font-family: 'Syne', sans-serif; font-size: 14px; line-height: 1.5; min-height: 100vh; }
+.shell { display: flex; min-height: 100vh; }
+.sidebar { width: 230px; min-width: 230px; background: var(--surface); border-right: 1px solid var(--border); display: flex; flex-direction: column; position: fixed; top: 0; left: 0; bottom: 0; z-index: 100; }
+.main { margin-left: 230px; flex: 1; padding: 40px 48px; max-width: 880px; }
+.logo { padding: 28px 24px 20px; border-bottom: 1px solid var(--border); }
+.logo-org { font-size: 10px; letter-spacing: 0.15em; color: var(--text2); text-transform: uppercase; font-weight: 600; margin-bottom: 6px; }
+.logo-name { font-size: 22px; font-weight: 800; line-height: 1.1; color: var(--text); }
+.logo-name span { color: var(--accent-light); }
+.nav { padding: 16px 12px; flex: 1; }
+.nav-item { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: var(--radius); cursor: pointer; color: var(--text2); font-weight: 600; font-size: 13px; letter-spacing: 0.02em; transition: all 0.15s; border: none; background: none; width: 100%; text-align: left; margin-bottom: 2px; }
+.nav-item:hover { background: var(--surface2); color: var(--text); }
+.nav-item.active { background: var(--accent); color: #fff; }
+.nav-icon { font-size: 15px; width: 18px; text-align: center; }
+.auth-status { padding: 14px 24px; border-top: 1px solid var(--border); font-size: 11px; }
+.auth-status.signed-in { color: var(--success); }
+.auth-status.signed-out { color: var(--text3); }
+.auth-btn { margin-top: 6px; font-size: 11px; padding: 4px 10px; border-radius: var(--radius); border: 1px solid var(--border2); background: none; color: var(--text2); cursor: pointer; font-family: 'Syne', sans-serif; font-weight: 600; }
+.auth-btn:hover { background: var(--surface2); color: var(--text); }
+.sidebar-footer { padding: 12px 24px; border-top: 1px solid var(--border); font-size: 10px; color: var(--text3); line-height: 1.7; }
+.panel { display: none; }
+.panel.active { display: block; }
+.page-title { font-size: 28px; font-weight: 800; letter-spacing: -0.5px; margin-bottom: 6px; }
+.page-sub { color: var(--text2); font-size: 12px; margin-bottom: 32px; font-family: 'DM Mono', monospace; }
+label { display: block; font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--text2); margin-bottom: 6px; margin-top: 18px; font-weight: 600; }
+label:first-child { margin-top: 0; }
+input[type=text], input[type=email], input[type=tel], textarea, select {
+  width: 100%; background: #1e2e52; border: 1px solid #3a5282; border-radius: var(--radius);
+  color: #e8edf8; font-family: 'DM Mono', monospace; font-size: 13px; padding: 10px 14px;
+  outline: none; transition: border-color 0.15s; appearance: none;
+}
+input:focus, textarea:focus, select:focus { border-color: var(--accent-light); background: #233460; }
+textarea { resize: vertical; min-height: 80px; line-height: 1.6; }
+select {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%23b0bdd8' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat; background-position: right 12px center; padding-right: 32px; cursor: pointer;
+}
+input::placeholder, textarea::placeholder { color: #7a90bb; }
+.row-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+.row-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px; }
+.field-hint { font-size: 11px; font-family: 'DM Mono', monospace; color: var(--text3); margin-top: 5px; line-height: 1.6; }
+.btn { display: inline-flex; align-items: center; gap: 6px; padding: 9px 18px; border-radius: var(--radius); font-family: 'Syne', sans-serif; font-size: 13px; font-weight: 700; letter-spacing: 0.04em; cursor: pointer; border: 1px solid var(--border2); background: var(--surface2); color: var(--text); transition: all 0.15s; text-decoration: none; }
+.btn:hover { background: var(--surface3); }
+.btn-accent { background: var(--accent); color: #fff; border-color: var(--accent); }
+.btn-accent:hover { background: var(--accent-light); border-color: var(--accent-light); }
+.btn-danger { color: var(--danger); border-color: #3a1020; background: #150810; }
+.btn-danger:hover { background: #200e14; }
+.btn-sm { padding: 5px 12px; font-size: 12px; }
+.btn-row { display: flex; gap: 8px; margin-top: 20px; flex-wrap: wrap; align-items: center; }
+.pill-group { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; }
+.pill { padding: 6px 14px; border-radius: 40px; font-size: 12px; font-weight: 700; letter-spacing: 0.06em; cursor: pointer; border: 1px solid var(--border2); background: var(--surface2); color: var(--text2); transition: all 0.15s; font-family: 'Syne', sans-serif; }
+.pill:hover { color: var(--text); border-color: #5a80b0; }
+.pill.on { background: var(--accent); color: #fff; border-color: var(--accent); }
+.meeting-btn-group { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 8px; }
+.btn-meeting { background: var(--accent-pale); border: 1px solid var(--accent); color: var(--info); font-size: 12px; padding: 9px 14px; justify-content: center; cursor: pointer; font-family: 'Syne', sans-serif; font-weight: 700; border-radius: var(--radius); transition: all 0.15s; display: flex; align-items: center; gap: 6px; }
+.btn-meeting:hover { background: var(--surface3); border-color: var(--accent-light); color: #fff; }
+.btn-meeting.selected { background: #0a2e1a; border-color: #1a5e30; color: var(--success); }
+.claude-note { background: var(--accent-pale); border: 1px solid var(--accent); border-radius: var(--radius-lg); padding: 16px 20px; margin-top: 20px; font-size: 13px; font-family: 'DM Mono', monospace; color: var(--text2); line-height: 1.7; }
+.claude-note strong { color: var(--accent-light); }
+.card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 20px 24px; margin-bottom: 12px; transition: border-color 0.15s; }
+.card:hover { border-color: var(--border2); }
+.stats-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 28px; }
+.stat { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 16px 20px; text-align: center; }
+.stat-num { font-size: 32px; font-weight: 800; color: var(--accent-light); line-height: 1; }
+.stat-label { font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--text2); margin-top: 4px; font-weight: 600; }
+.c-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 10px; }
+.c-name { font-size: 16px; font-weight: 700; }
+.c-role-line { font-size: 12px; color: var(--text2); font-family: 'DM Mono', monospace; margin-top: 2px; }
+.badge { font-size: 10px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; padding: 4px 10px; border-radius: 20px; white-space: nowrap; }
+.badge-new { background: #0a2a4e; color: var(--info); }
+.badge-contacted { background: #2a2210; color: var(--warning); }
+.badge-added { background: #0a2e1a; color: var(--success); }
+.c-meta { display: flex; gap: 14px; flex-wrap: wrap; margin-bottom: 10px; }
+.c-meta span { font-size: 11px; font-family: 'DM Mono', monospace; color: var(--text2); display: flex; align-items: center; gap: 4px; }
+.c-meta a { color: var(--info); text-decoration: none; }
+.c-meta a:hover { text-decoration: underline; }
+.c-notes { font-size: 12px; font-family: 'DM Mono', monospace; color: var(--text2); font-style: italic; border-left: 2px solid var(--border2); padding-left: 10px; margin-bottom: 10px; line-height: 1.6; }
+.c-actions { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.c-actions select { width: auto; font-size: 12px; padding: 5px 28px 5px 10px; }
+.filter-bar { display: flex; gap: 10px; margin-bottom: 20px; flex-wrap: wrap; }
+.filter-bar input { font-size: 13px; flex: 1; min-width: 160px; }
+.filter-bar select { width: auto; font-size: 13px; }
+.add-section { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 24px; margin-bottom: 28px; }
+.section-label { font-size: 11px; letter-spacing: 0.12em; text-transform: uppercase; font-weight: 700; color: var(--accent-light); margin-bottom: 16px; }
+.empty { text-align: center; padding: 60px 20px; color: var(--text3); }
+.empty-icon { font-size: 40px; margin-bottom: 12px; }
+.loading-msg { font-size: 13px; font-family: 'DM Mono', monospace; color: var(--text2); margin-top: 12px; display: none; }
+.sp-banner { padding: 10px 16px; border-radius: var(--radius); font-size: 12px; font-family: 'DM Mono', monospace; margin-bottom: 16px; display: none; line-height: 1.6; }
+.sp-banner.ok { background: #0a2e1a; color: var(--success); border: 1px solid #1a5e30; display: block; }
+.sp-banner.err { background: #200e14; color: var(--danger); border: 1px solid #5e1a20; display: block; }
+.sp-banner.info { background: #0a1e3e; color: var(--info); border: 1px solid #1a3a6e; display: block; }
+::-webkit-scrollbar { width: 6px; }
+::-webkit-scrollbar-track { background: var(--bg); }
+::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 3px; }
+#toast { position: fixed; bottom: 24px; right: 24px; background: var(--accent); color: #fff; padding: 10px 18px; border-radius: var(--radius); font-weight: 700; font-size: 13px; transform: translateY(60px); opacity: 0; transition: all 0.25s; z-index: 999; pointer-events: none; }
+#toast.show { transform: translateY(0); opacity: 1; }
+</style>
+</head>
+<body>
+<div class="shell">
+  <aside class="sidebar">
+    <div class="logo">
+      <div class="logo-org">South River Federal Solutions</div>
+      <div class="logo-name">Recruiter<br/><span>Toolkit</span></div>
+    </div>
+    <nav class="nav">
+      <button class="nav-item active" onclick="goTo('search',this)"><span class="nav-icon">⌖</span> Candidate Search</button>
+      <button class="nav-item" onclick="goTo('tracker',this)"><span class="nav-icon">◫</span> Candidate Tracker</button>
+      <button class="nav-item" onclick="goTo('outreach',this)"><span class="nav-icon">↗</span> Outreach Writer</button>
+    </nav>
+    <div class="auth-status signed-out" id="auth-status-box">
+      <div id="auth-status-text">Not signed in to Microsoft</div>
+      <button class="auth-btn" id="auth-btn" onclick="toggleAuth()">Sign in</button>
+    </div>
+    <div class="sidebar-footer">Candidate data syncs to<br/>SharePoint · Recruiting Potentials</div>
+  </aside>
+
+  <main class="main">
+
+    <!-- CANDIDATE SEARCH -->
+    <div class="panel active" id="panel-search">
+      <div class="page-title">Candidate Search</div>
+      <div class="page-sub">// generate boolean search strings to find candidates on any platform</div>
+      <div class="add-section">
+        <div class="section-label">Job details</div>
+        <label>Job title(s)</label>
+        <textarea id="s-titles" placeholder="e.g. Project Manager OR Nurse OR Data Analyst" style="min-height:56px"></textarea>
+        <p class="field-hint">Separate multiple titles with OR (all caps). Wrap multi-word titles in quotes.</p>
+        <label>Required skills / certifications</label>
+        <textarea id="s-skills" placeholder="e.g. Financial analysis, Python, AWS, PMP, Agile Black Belt" style="min-height:56px"></textarea>
+        <p class="field-hint">Separate skills with commas. Each will be included as its own search term.</p>
+        <div class="row-2">
+          <div>
+            <label>Location</label>
+            <input type="text" id="s-location" placeholder="e.g. Washington, DC" />
+            <p class="field-hint">City, state, or region. One location per search.</p>
+          </div>
+          <div>
+            <label>Min. years of experience</label>
+            <input type="text" id="s-exp" placeholder="e.g. 5" />
+            <p class="field-hint">Enter a number only (e.g. 5).</p>
+          </div>
+        </div>
+        <div class="row-2">
+          <div>
+            <label>Education / degree keywords</label>
+            <input type="text" id="s-edu" placeholder='e.g. Computer Science, "BS" OR "MS"' />
+            <p class="field-hint">Separate values with commas. Use OR between alternatives.</p>
+          </div>
+          <div>
+            <label>Target companies (past or current)</label>
+            <input type="text" id="s-companies" placeholder="e.g. GDIT, Raytheon, Palantir" />
+            <p class="field-hint">Separate company names with commas.</p>
+          </div>
+        </div>
+        <label>Exclude keywords</label>
+        <input type="text" id="s-exclude" placeholder="e.g. Recruiter, Doctor, Intern" />
+        <p class="field-hint">Separate words to exclude with commas. These will be filtered out of results.</p>
+        <label>Search platform</label>
+        <div class="pill-group" id="plat-group">
+          <button class="pill on">LinkedIn search</button>
+          <button class="pill">Google → LinkedIn</button>
+          <button class="pill">Google (general)</button>
+        </div>
+        <div class="btn-row">
+          <button class="btn btn-accent" onclick="generateSearch()">Generate string</button>
+          <button class="btn" onclick="clearSearch()">Clear fields</button>
+          <button class="btn" onclick="restoreSearch()">Restore fields</button>
+        </div>
+      </div>
+      <div id="search-result" style="display:none">
+        <div class="section-label">Your search string</div>
+        <div style="background:#1a2846;border:1px solid #3a5282;border-radius:var(--radius-lg);padding:16px 20px;font-family:'DM Mono',monospace;font-size:13px;line-height:1.7;color:var(--info);white-space:pre-wrap;word-break:break-word;margin-top:16px;" id="search-output"></div>
+        <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap;">
+          <button class="btn btn-sm" onclick="copyEl('search-output')">⎘ Copy</button>
+          <button class="btn btn-sm" onclick="openSearch()">↗ Open in browser</button>
+        </div>
+        <p id="search-hint" style="font-size:12px;color:var(--text2);font-family:'DM Mono',monospace;margin-top:10px;line-height:1.7;"></p>
+      </div>
+    </div>
+
+    <!-- CANDIDATE TRACKER -->
+    <div class="panel" id="panel-tracker">
+      <div class="page-title">Candidate Tracker</div>
+      <div class="page-sub">// shared team list · syncs live to SharePoint · Recruiting Potentials</div>
+      <div id="sp-banner-tracker" class="sp-banner info">Sign in with your Microsoft account using the button in the sidebar to load and sync candidates with your team.</div>
+      <div class="stats-grid">
+        <div class="stat"><div class="stat-num" id="st-total">0</div><div class="stat-label">Total</div></div>
+        <div class="stat"><div class="stat-num" id="st-new">0</div><div class="stat-label">New</div></div>
+        <div class="stat"><div class="stat-num" id="st-contacted">0</div><div class="stat-label">Contacted</div></div>
+        <div class="stat"><div class="stat-num" id="st-added">0</div><div class="stat-label">In Repository</div></div>
+      </div>
+      <div class="add-section">
+        <div class="section-label">Add candidate</div>
+        <p style="font-size:12px;color:var(--text2);font-family:'DM Mono',monospace;margin-bottom:16px;line-height:1.7;">Find someone using Candidate Search, then manually enter their details here. Saving writes directly to the shared SharePoint list so your whole team sees them immediately.</p>
+        <div class="row-2">
+          <div><label>Full name *</label><input type="text" id="c-name" placeholder="Jane Smith" /></div>
+          <div><label>Current role</label><input type="text" id="c-role" placeholder="Senior Engineer" /></div>
+        </div>
+        <div class="row-3">
+          <div><label>Location</label><input type="text" id="c-loc" placeholder="Boston, MA" /></div>
+          <div><label>Email</label><input type="text" id="c-email" placeholder="jane@company.com" /></div>
+          <div><label>Phone number</label><input type="tel" id="c-phone" placeholder="(555) 867-5309" oninput="formatPhone(this)" /></div>
+        </div>
+        <div class="row-3">
+          <div><label>Status</label>
+            <select id="c-status">
+              <option value="New">New</option>
+              <option value="Contacted">Contacted</option>
+              <option value="Added to Repository">Added to Repository</option>
+            </select>
+          </div>
+          <div><label>Profile URL</label><input type="text" id="c-url" placeholder="linkedin.com/in/..." /></div>
+          <div><label>Source</label><input type="text" id="c-source" placeholder="Google search, LinkedIn..." /></div>
+        </div>
+        <label>Notes</label>
+        <textarea id="c-notes" placeholder="Skills match, 6 yrs Python, open to work, DC area..." style="min-height:64px"></textarea>
+        <div class="btn-row">
+          <button class="btn btn-accent" onclick="addCandidate()">Save to SharePoint</button>
+          <button class="btn" onclick="clearCandidateForm()">Clear</button>
+        </div>
+        <div class="loading-msg" id="c-loading">Saving to SharePoint...</div>
+      </div>
+      <div class="filter-bar">
+        <input type="text" id="f-search" placeholder="Search by name, role, location, notes..." oninput="renderCandidates()" />
+        <select id="f-status" onchange="renderCandidates()" style="min-width:170px;">
+          <option value="">All statuses</option>
+          <option value="New">New</option>
+          <option value="Contacted">Contacted</option>
+          <option value="Added to Repository">Added to Repository</option>
+        </select>
+        <button class="btn btn-sm" onclick="loadCandidates()">↺ Refresh</button>
+        <button class="btn btn-sm" onclick="exportCSV()">↓ CSV</button>
+      </div>
+      <div id="candidate-list"></div>
+    </div>
+
+    <!-- OUTREACH WRITER -->
+    <div class="panel" id="panel-outreach">
+      <div class="page-title">Outreach Writer</div>
+      <div class="page-sub">// fill in the details, then open in Claude to generate your message</div>
+      <div class="add-section">
+        <div class="section-label">Message details</div>
+        <div class="row-2">
+          <div><label>Candidate name</label><input type="text" id="o-name" placeholder="Jane Smith" /></div>
+          <div><label>Their current role</label><input type="text" id="o-crole" placeholder="Senior Backend Engineer" /></div>
+        </div>
+        <label>Job you're hiring for</label>
+        <input type="text" id="o-job" placeholder="e.g. Project Manager, Data Analyst, Registered Nurse" />
+        <label>Why they're a strong fit (be specific)</label>
+        <textarea id="o-why" placeholder="e.g. PMP certified, 8 years federal contracting, managed teams of 10+, open to work..." style="min-height:72px"></textarea>
+        <label>Your name</label>
+        <input type="text" id="o-sender" placeholder="e.g. Alex Johnson" />
+        <label>Tone</label>
+        <div class="pill-group" id="tone-group">
+          <button class="pill on">Professional</button>
+          <button class="pill">Friendly &amp; casual</button>
+          <button class="pill">Very brief</button>
+        </div>
+        <label>Meeting type (optional — adds scheduling link to message)</label>
+        <p class="field-hint" style="margin-bottom:8px;">Select a meeting type to include a booking link. Click again to deselect.</p>
+        <div class="meeting-btn-group">
+          <button class="btn-meeting" id="mibtn-0" onclick="selectMeeting(0)">📅 Paul Matt — 60 min</button>
+          <button class="btn-meeting" id="mibtn-1" onclick="selectMeeting(1)">📅 Paul Matt — 30 min</button>
+          <button class="btn-meeting" id="mibtn-2" onclick="selectMeeting(2)">📅 Paul Matt Leah</button>
+          <button class="btn-meeting" id="mibtn-3" onclick="selectMeeting(3)">📅 Paul Matt Kyra</button>
+        </div>
+        <label>Format</label>
+        <div class="pill-group" id="msgplat-group">
+          <button class="pill on">LinkedIn DM</button>
+          <button class="pill">Email (with subject)</button>
+        </div>
+        <div class="btn-row">
+          <button class="btn btn-accent" onclick="openInClaude()">↗ Write message in Claude</button>
+          <button class="btn" onclick="clearOutreach()">Clear</button>
+        </div>
+        <div class="claude-note" id="claude-note" style="display:none">
+          <strong>Almost there!</strong> Claude is opening in a new tab with your prompt ready to go.<br/>
+          Hit send in Claude, copy the message it writes, and paste it wherever you need it.
+        </div>
+      </div>
+    </div>
+
+  </main>
+</div>
+<div id="toast"></div>
+
+<script>
+const COMPANY_NAME = 'South River Federal Solutions';
+const MEETING_LINKS = [
+  { label:'Paul Matt — 60 min', url:'https://meetings.hubspot.com/paul-scace/matt-paul-filter-meeting' },
+  { label:'Paul Matt — 30 min', url:'https://meetings.hubspot.com/paul-scace/paul-matt-meeting-30-minutes' },
+  { label:'Paul Matt Leah',     url:'https://meetings.hubspot.com/leah-hanson/matt-paul-leah-interview' },
+  { label:'Paul Matt Kyra',     url:'https://meetings.hubspot.com/paul-scace/paul-matt-kyra-general' }
+];
+const SP_COL = {
+  name:'Title', role:'CurrentRole', location:'Location', email:'Email',
+  status:'Status', url:'ProfileURL', source:'Source', notes:'Notes', phone:'PhoneNumber'
+};
+const MSAL_CONFIG = {
+  auth: {
+    clientId:    'd3414232-71e6-4018-aa5b-5a96cee86415',
+    authority:   'https://login.microsoftonline.com/32cb4d1a-0419-4f41-9884-3516ab14274e',
+    redirectUri: window.location.href.split('?')[0].split('#')[0]
+  },
+  cache: { cacheLocation:'sessionStorage', storeAuthStateInCookie:true }
+};
+const SP_SITE  = 'https://srfed.sharepoint.com/sites/HR';
+const SP_LIST  = 'Recruiting Potentials';
+const SP_SCOPE = ['https://srfed.sharepoint.com/AllSites.Write'];
+
+let msalInstance=null, msalAccount=null;
+let candidates=[], savedSearchFields=null, currentSearch='';
+let platState='linkedin', toneState='professional', msgplatState='linkedin';
+let selectedMeeting=null, spListItemType=null;
+
+window.addEventListener('load', async () => {
+  try {
+    msalInstance = new msal.PublicClientApplication(MSAL_CONFIG);
+    await msalInstance.initialize();
+    const resp = await msalInstance.handleRedirectPromise();
+    if (resp?.account) { msalAccount=resp.account; onSignedIn(); }
+    else { const a=msalInstance.getAllAccounts(); if(a.length>0){msalAccount=a[0];onSignedIn();} }
+  } catch(e) { console.warn('MSAL init:',e); }
+  setupPills(); renderCandidates();
+});
+
+async function toggleAuth() {
+  if (msalAccount) {
+    try{await msalInstance.logoutPopup({account:msalAccount});}catch(e){}
+    msalAccount=null; onSignedOut();
+  } else {
+    try {
+      const r=await msalInstance.loginPopup({scopes:SP_SCOPE,prompt:'select_account'});
+      msalAccount=r.account; onSignedIn();
+    } catch(e){if(e.errorCode!=='user_cancelled')toast('Sign-in failed: '+(e.errorMessage||e.message));}
+  }
+}
+function onSignedIn(){document.getElementById('auth-status-box').className='auth-status signed-in';document.getElementById('auth-status-text').textContent='✓ '+(msalAccount.name||msalAccount.username);document.getElementById('auth-btn').textContent='Sign out';setBanner('tracker','ok','✓ Connected to SharePoint · Recruiting Potentials');loadCandidates();}
+function onSignedOut(){document.getElementById('auth-status-box').className='auth-status signed-out';document.getElementById('auth-status-text').textContent='Not signed in to Microsoft';document.getElementById('auth-btn').textContent='Sign in';setBanner('tracker','info','Sign in with your Microsoft account (sidebar) to load and sync candidates.');candidates=[];renderCandidates();}
+async function getToken(){if(!msalInstance||!msalAccount)return null;try{return(await msalInstance.acquireTokenSilent({scopes:SP_SCOPE,account:msalAccount})).accessToken;}catch(e){try{return(await msalInstance.acquireTokenPopup({scopes:SP_SCOPE})).accessToken;}catch(e2){toast('Could not get auth token — try signing in again');return null;}}}
+async function getDigest(t){const r=await fetch(`${SP_SITE}/_api/contextinfo`,{method:'POST',headers:{'Authorization':'Bearer '+t,'Accept':'application/json;odata=verbose'}});return(await r.json()).d.GetContextWebInformation.FormDigestValue;}
+async function getListItemType(t){if(spListItemType)return spListItemType;const r=await fetch(`${SP_SITE}/_api/web/lists/getbytitle('${encodeURIComponent(SP_LIST)}')?$select=ListItemEntityTypeFullName`,{headers:{'Authorization':'Bearer '+t,'Accept':'application/json;odata=verbose'}});const d=await r.json();spListItemType=d?.d?.ListItemEntityTypeFullName||'SP.Data.Recruiting_x0020_PotentialsListItem';return spListItemType;}
+
+async function loadCandidates(){if(!msalAccount)return;setBanner('tracker','info','Loading candidates from SharePoint...');const t=await getToken();if(!t)return;try{const sel=['Id',SP_COL.name,SP_COL.role,SP_COL.location,SP_COL.email,SP_COL.phone,SP_COL.status,SP_COL.url,SP_COL.source,SP_COL.notes].join(',');const r=await fetch(`${SP_SITE}/_api/web/lists/getbytitle('${encodeURIComponent(SP_LIST)}')/items?$orderby=Created desc&$top=500&$select=${sel}`,{headers:{'Authorization':'Bearer '+t,'Accept':'application/json;odata=verbose'}});if(!r.ok){const e=await r.json().catch(()=>null);setBanner('tracker','err',`SharePoint error ${r.status}: ${e?.error?.message?.value||'check permissions.'}`);return;}const data=await r.json();candidates=(data.d.results||[]).map(x=>({id:x.Id,name:x[SP_COL.name]||'',role:x[SP_COL.role]||'',location:x[SP_COL.location]||'',email:x[SP_COL.email]||'',phone:x[SP_COL.phone]||'',status:x[SP_COL.status]||'New',url:x[SP_COL.url]||'',source:x[SP_COL.source]||'',notes:x[SP_COL.notes]||''}));setBanner('tracker','ok',`✓ ${candidates.length} candidate${candidates.length!==1?'s':''} loaded from SharePoint`);renderCandidates();}catch(e){setBanner('tracker','err','Network error loading from SharePoint.');}}
+
+async function addCandidate(){const name=document.getElementById('c-name').value.trim();if(!name){toast('Please enter a candidate name');return;}if(!msalAccount){toast('Please sign in to Microsoft first');return;}document.getElementById('c-loading').style.display='block';const t=await getToken();if(!t){document.getElementById('c-loading').style.display='none';return;}try{const[digest,listType]=await Promise.all([getDigest(t),getListItemType(t)]);const body={__metadata:{type:listType}};body[SP_COL.name]=name;body[SP_COL.role]=document.getElementById('c-role').value.trim();body[SP_COL.location]=document.getElementById('c-loc').value.trim();body[SP_COL.email]=document.getElementById('c-email').value.trim();body[SP_COL.phone]=document.getElementById('c-phone').value.trim();body[SP_COL.status]=document.getElementById('c-status').value;body[SP_COL.url]=document.getElementById('c-url').value.trim();body[SP_COL.source]=document.getElementById('c-source').value.trim();body[SP_COL.notes]=document.getElementById('c-notes').value.trim();const r=await fetch(`${SP_SITE}/_api/web/lists/getbytitle('${encodeURIComponent(SP_LIST)}')/items`,{method:'POST',headers:{'Authorization':'Bearer '+t,'Accept':'application/json;odata=verbose','Content-Type':'application/json;odata=verbose','X-RequestDigest':digest},body:JSON.stringify(body)});if(!r.ok){const e=await r.json().catch(()=>null);const m=e?.error?.message?.value||`HTTP ${r.status}`;toast('Save failed: '+(m.length>100?m.slice(0,100)+'…':m));document.getElementById('c-loading').style.display='none';return;}toast('Saved to SharePoint!');clearCandidateForm();await loadCandidates();}catch(e){toast('Save failed — check your connection');}document.getElementById('c-loading').style.display='none';}
+
+async function updateCandidateStatus(id,val){if(!msalAccount){toast('Not signed in');return;}const t=await getToken();if(!t)return;try{const[digest,listType]=await Promise.all([getDigest(t),getListItemType(t)]);const body={__metadata:{type:listType}};body[SP_COL.status]=val;const r=await fetch(`${SP_SITE}/_api/web/lists/getbytitle('${encodeURIComponent(SP_LIST)}')/items(${id})`,{method:'POST',headers:{'Authorization':'Bearer '+t,'Accept':'application/json;odata=verbose','Content-Type':'application/json;odata=verbose','X-RequestDigest':digest,'IF-MATCH':'*','X-HTTP-Method':'MERGE'},body:JSON.stringify(body)});if(r.ok||r.status===204){const c=candidates.find(x=>x.id===id);if(c){c.status=val;renderCandidates();}toast('Status updated');}else{toast('Update failed');}}catch(e){toast('Update failed');}}
+
+async function removeCandidate(id){if(!confirm('Remove this candidate from the SharePoint list?'))return;if(!msalAccount){toast('Not signed in');return;}const t=await getToken();if(!t)return;try{const digest=await getDigest(t);const r=await fetch(`${SP_SITE}/_api/web/lists/getbytitle('${encodeURIComponent(SP_LIST)}')/items(${id})`,{method:'POST',headers:{'Authorization':'Bearer '+t,'Accept':'application/json;odata=verbose','Content-Type':'application/json;odata=verbose','X-RequestDigest':digest,'IF-MATCH':'*','X-HTTP-Method':'DELETE'}});if(r.ok||r.status===204){candidates=candidates.filter(x=>x.id!==id);renderCandidates();toast('Removed');}else{toast('Remove failed');}}catch(e){toast('Remove failed');}}
+
+function renderCandidates(){const q=(document.getElementById('f-search')?.value||'').toLowerCase();const fs=document.getElementById('f-status')?.value||'';const filtered=candidates.filter(c=>{const txt=(c.name+' '+c.role+' '+c.location+' '+c.notes+' '+c.source+' '+c.email+' '+c.phone).toLowerCase();return(!q||txt.includes(q))&&(!fs||c.status===fs);});document.getElementById('st-total').textContent=candidates.length;document.getElementById('st-new').textContent=candidates.filter(c=>c.status==='New').length;document.getElementById('st-contacted').textContent=candidates.filter(c=>c.status==='Contacted').length;document.getElementById('st-added').textContent=candidates.filter(c=>c.status==='Added to Repository').length;const list=document.getElementById('candidate-list');if(!filtered.length){list.innerHTML=`<div class="empty"><div class="empty-icon">◫</div><p>${candidates.length===0?'No candidates yet. Add your first one above.':'No candidates match your filters.'}</p></div>`;return;}const bm={'New':'badge-new','Contacted':'badge-contacted','Added to Repository':'badge-added'};list.innerHTML=filtered.map(c=>`<div class="card"><div class="c-header"><div><div class="c-name">${esc(c.name)}</div><div class="c-role-line">${esc(c.role)||'—'}</div></div><span class="badge ${bm[c.status]||'badge-new'}">${esc(c.status)}</span></div><div class="c-meta">${c.location?`<span>📍 ${esc(c.location)}</span>`:''}${c.email?`<span>✉ ${esc(c.email)}</span>`:''}${c.phone?`<span>📞 ${esc(c.phone)}</span>`:''}${c.url?`<span>🔗 <a href="${c.url.startsWith('http')?esc(c.url):'https://'+esc(c.url)}" target="_blank">Profile</a></span>`:''}${c.source?`<span>⌖ ${esc(c.source)}</span>`:''}</div>${c.notes?`<div class="c-notes">${esc(c.notes)}</div>`:''}<div class="c-actions"><select onchange="updateCandidateStatus(${c.id},this.value)"><option value="New"${c.status==='New'?' selected':''}>New</option><option value="Contacted"${c.status==='Contacted'?' selected':''}>Contacted</option><option value="Added to Repository"${c.status==='Added to Repository'?' selected':''}>Added to Repository</option></select><button class="btn btn-sm btn-danger" onclick="removeCandidate(${c.id})">✕ Remove</button></div></div>`).join('');}
+
+function clearCandidateForm(){['c-name','c-role','c-loc','c-email','c-phone','c-url','c-source','c-notes'].forEach(id=>document.getElementById(id).value='');document.getElementById('c-status').value='New';}
+function exportCSV(){if(!candidates.length){toast('No candidates to export');return;}const cols=['Name','Role','Location','Email','Phone','Status','Profile URL','Source','Notes'];const rows=candidates.map(c=>[c.name,c.role,c.location,c.email,c.phone,c.status,c.url,c.source,c.notes].map(v=>`"${(v||'').replace(/"/g,'""')}"`).join(','));const a=document.createElement('a');a.href='data:text/csv;charset=utf-8,'+encodeURIComponent([cols.join(','),...rows].join('\n'));a.download='recruiting_potentials_'+new Date().toISOString().slice(0,10)+'.csv';a.click();toast('CSV downloaded!');}
+function formatPhone(input){const d=input.value.replace(/\D/g,'').slice(0,10);if(!d){input.value='';return;}if(d.length<=3)input.value='('+d;else if(d.length<=6)input.value='('+d.slice(0,3)+') '+d.slice(3);else input.value='('+d.slice(0,3)+') '+d.slice(3,6)+'-'+d.slice(6);}
+
+function setupPills(){
+  const pv=['linkedin','google-linkedin','google'];
+  document.querySelectorAll('#plat-group .pill').forEach((b,i)=>{b.onclick=()=>{document.querySelectorAll('#plat-group .pill').forEach(x=>x.classList.remove('on'));b.classList.add('on');platState=pv[i];};});
+  const tv=['professional','friendly','brief'];
+  document.querySelectorAll('#tone-group .pill').forEach((b,i)=>{b.onclick=()=>{document.querySelectorAll('#tone-group .pill').forEach(x=>x.classList.remove('on'));b.classList.add('on');toneState=tv[i];};});
+  const mv=['linkedin','email'];
+  document.querySelectorAll('#msgplat-group .pill').forEach((b,i)=>{b.onclick=()=>{document.querySelectorAll('#msgplat-group .pill').forEach(x=>x.classList.remove('on'));b.classList.add('on');msgplatState=mv[i];};});
+}
+
+function getSearchFields(){return{titles:document.getElementById('s-titles').value.trim(),skills:document.getElementById('s-skills').value.trim(),location:document.getElementById('s-location').value.trim(),exp:document.getElementById('s-exp').value.trim(),edu:document.getElementById('s-edu').value.trim(),companies:document.getElementById('s-companies').value.trim(),exclude:document.getElementById('s-exclude').value.trim()};}
+function setSearchFields(f){document.getElementById('s-titles').value=f.titles||'';document.getElementById('s-skills').value=f.skills||'';document.getElementById('s-location').value=f.location||'';document.getElementById('s-exp').value=f.exp||'';document.getElementById('s-edu').value=f.edu||'';document.getElementById('s-companies').value=f.companies||'';document.getElementById('s-exclude').value=f.exclude||'';}
+
+function generateSearch(){const f=getSearchFields();savedSearchFields={...f};const skillArr=f.skills?f.skills.split(',').map(s=>s.trim()).filter(Boolean):[];const compArr=f.companies?f.companies.split(',').map(s=>s.trim()).filter(Boolean):[];const exArr=f.exclude?f.exclude.split(',').map(s=>s.trim()).filter(Boolean):[];let parts=[];if(platState==='linkedin'){if(f.titles)parts.push(f.titles);if(skillArr.length)parts.push(skillArr.length>1?'('+skillArr.map(s=>`"${s}"`).join(' OR ')+')': `"${skillArr[0]}"`);if(f.location)parts.push(`"${f.location}"`);if(f.edu)parts.push(f.edu);if(compArr.length)parts.push(compArr.length>1?'('+compArr.join(' OR ')+')':compArr[0]);if(exArr.length)parts.push(exArr.map(e=>`-"${e}"`).join(' '));document.getElementById('search-hint').textContent='→ Paste into the LinkedIn search bar. Then apply filters: Connections, Location, Open to Work, etc.';}else if(platState==='google-linkedin'){parts.push('site:linkedin.com/in');if(f.titles)parts.push(f.titles);if(skillArr.length)parts.push(skillArr.length>1?'('+skillArr.map(s=>`"${s}"`).join(' OR ')+')': `"${skillArr[0]}"`);if(f.location)parts.push(`"${f.location}"`);if(f.edu)parts.push(f.edu);if(compArr.length)parts.push('('+compArr.join(' OR ')+')');if(exArr.length)parts.push(exArr.map(e=>`-"${e}"`).join(' '));document.getElementById('search-hint').textContent="→ Paste into Google. Returns publicly indexed LinkedIn profiles.";}else{if(f.titles)parts.push(f.titles);if(skillArr.length)parts.push(skillArr.length>1?'('+skillArr.map(s=>`"${s}"`).join(' OR ')+')': `"${skillArr[0]}"`);if(f.location)parts.push(`"${f.location}"`);if(f.edu)parts.push(f.edu);if(f.exp)parts.push(`("${f.exp} years" OR "${f.exp}+ years")`);if(compArr.length)parts.push('('+compArr.join(' OR ')+')');if(exArr.length)parts.push(exArr.map(e=>`-"${e}"`).join(' '));document.getElementById('search-hint').textContent='→ Paste into Google to find resumes, portfolios, and profiles across the open web.';}currentSearch=parts.join(' ')||'(Fill in at least one field above)';document.getElementById('search-output').textContent=currentSearch;document.getElementById('search-result').style.display='block';}
+
+function clearSearch(){savedSearchFields=getSearchFields();setSearchFields({});document.getElementById('search-result').style.display='none';}
+function restoreSearch(){if(savedSearchFields){setSearchFields(savedSearchFields);toast('Fields restored!');}else{toast('Nothing to restore yet — clear the fields first');}}
+function openSearch(){const q=encodeURIComponent(currentSearch);window.open(platState==='linkedin'?`https://www.linkedin.com/search/results/people/?keywords=${q}`:`https://www.google.com/search?q=${q}`,'_blank');}
+
+function selectMeeting(i){
+  if(selectedMeeting===i){selectedMeeting=null;resetMeetingButtons();toast('Meeting link removed');}
+  else{selectedMeeting=i;resetMeetingButtons();const b=document.getElementById('mibtn-'+i);b.classList.add('selected');b.textContent='✓ '+MEETING_LINKS[i].label+' — selected';toast('Meeting link selected');}
+}
+function resetMeetingButtons(){MEETING_LINKS.forEach((m,i)=>{const b=document.getElementById('mibtn-'+i);if(b){b.classList.remove('selected');b.textContent='📅 '+m.label;}});}
+
+function openInClaude(){
+  const name=document.getElementById('o-name').value.trim();
+  const job=document.getElementById('o-job').value.trim();
+  if(!name||!job){toast('Please enter at least a candidate name and job title');return;}
+  const sender=document.getElementById('o-sender').value.trim()||'the recruiter';
+  const toneMap={professional:'professional and polished',friendly:'friendly and casual',brief:'very brief — under 80 words total'};
+  const platMap={linkedin:'LinkedIn direct message',email:'cold recruiting email — include a Subject: line at the top'};
+  let schedLine='';
+  if(selectedMeeting!==null) schedLine=`\n- Include a natural sentence inviting them to schedule time at: ${MEETING_LINKS[selectedMeeting].url}`;
+  const prompt=`Write a ${toneMap[toneState]} ${platMap[msgplatState]} recruiting outreach message on behalf of South River Federal Solutions.
+
+Candidate name: ${name}
+Their current role: ${document.getElementById('o-crole').value.trim()||'not specified'}
+Job being hired for: ${job}
+Why they are a strong fit: ${document.getElementById('o-why').value.trim()||'their background aligns well with the role'}
+Sender name: ${sender}
+Company: South River Federal Solutions
+${schedLine}
+Sign the message with ${sender}'s name and South River Federal Solutions.
+
+Write ONLY the message — no explanation, no labels, no preamble. Start directly with the greeting or subject line.`;
+
+  // Copy prompt to clipboard and open Claude
+  navigator.clipboard.writeText(prompt).then(()=>{
+    document.getElementById('claude-note').style.display='block';
+    window.open('https://claude.ai/new','_blank');
+    toast('Prompt copied! Paste it into Claude and hit send.');
+  }).catch(()=>{
+    // Fallback: open Claude and show the prompt in a modal
+    window.open('https://claude.ai/new','_blank');
+    document.getElementById('claude-note').style.display='block';
+    document.getElementById('claude-note').innerHTML=`<strong>Claude is opening in a new tab.</strong> Copy and paste this prompt:<br/><br/><div style="background:#0a1628;padding:12px;border-radius:6px;margin-top:8px;font-size:12px;white-space:pre-wrap;color:var(--text2);border:1px solid var(--border2);">${esc(prompt)}</div>`;
+    toast('Claude opened — paste the prompt shown below');
+  });
+}
+
+function clearOutreach(){['o-name','o-crole','o-job','o-why','o-sender'].forEach(id=>document.getElementById(id).value='');selectedMeeting=null;resetMeetingButtons();document.getElementById('claude-note').style.display='none';}
+
+function goTo(p,b){document.querySelectorAll('.panel').forEach(x=>x.classList.remove('active'));document.querySelectorAll('.nav-item').forEach(x=>x.classList.remove('active'));document.getElementById('panel-'+p).classList.add('active');b.classList.add('active');}
+function setBanner(p,t,m){const el=document.getElementById('sp-banner-'+p);if(!el)return;el.className='sp-banner '+t;el.textContent=m;}
+function copyEl(id){const text=document.getElementById(id).textContent;navigator.clipboard.writeText(text).then(()=>toast('Copied!')).catch(()=>{const ta=document.createElement('textarea');ta.value=text;document.body.appendChild(ta);ta.select();document.execCommand('copy');document.body.removeChild(ta);toast('Copied!');});}
+function esc(s){return(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
+function toast(msg){const t=document.getElementById('toast');t.textContent=msg;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),2400);}
+</script>
+</body>
+</html>
