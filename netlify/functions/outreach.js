@@ -4,15 +4,26 @@ exports.handler = async function(event, context) {
   }
   try {
     const body = JSON.parse(event.body);
+    const apiKey = process.env.ANTHROPIC_KEY;
+    
+    if (!apiKey) {
+      return {
+        statusCode: 500,
+        headers: { 'Access-Control-Allow-Origin': '*' },
+        body: JSON.stringify({ error: { message: 'ANTHROPIC_KEY environment variable is not set' } })
+      };
+    }
+
     const response = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'x-api-key': process.env.ANTHROPIC_KEY,
+        'x-api-key': apiKey,
         'anthropic-version': '2023-06-01'
       },
       body: JSON.stringify(body)
     });
+
     const data = await response.json();
     return {
       statusCode: response.status,
