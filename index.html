@@ -815,11 +815,13 @@ async function handlePdf(file) {
     };
     var resp = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
+      mode: "cors",
+      credentials: "omit",
       headers: {
         "Content-Type": "application/json",
         "x-api-key": _apiKey,
         "anthropic-version": "2023-06-01",
-        "anthropic-dangerous-direct-browser-ipc": "true"
+        "anthropic-dangerous-direct-browser-access": "true"
       },
       body: JSON.stringify(payload)
     });
@@ -915,11 +917,13 @@ async function genOut() {
   try {
     var res = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
+      mode: "cors",
+      credentials: "omit",
       headers: {
         "Content-Type": "application/json",
         "x-api-key": _apiKey,
         "anthropic-version": "2023-06-01",
-        "anthropic-dangerous-direct-browser-ipc": "true"
+        "anthropic-dangerous-direct-browser-access": "true"
       },
       body: JSON.stringify({
         model: "claude-sonnet-4-5",
@@ -989,25 +993,20 @@ function filterAndMap(items,role,loc,skills,source) {
   var skArr = skills ? skills.split(",").map(function(s){return s.trim().toLowerCase();}).filter(Boolean) : [];
 
   return items.filter(function(x){
-    var mapped = getMappedFields(x, source);
-
-    // For role: search name, title, notes, AND all raw string values (catches unmapped fields)
-    var rawBlob = Object.keys(x).map(function(k){
+    // Build a text blob from ALL string values in the record for searching
+    var allText = "";
+    for (var k in x) {
       var v = x[k];
-      // Skip numeric-only values and GUIDs — they are IDs, not searchable text
-      if (!v || typeof v !== "string") return "";
-      if (/^\d+$/.test(v)) return "";
-      if (/^[0-9a-f]{8}-[0-9a-f]{4}/i.test(v)) return "";
-      return v.toLowerCase();
-    }).join(" ");
+      if (v && typeof v === "string" && v.length > 1 && v.length < 500) {
+        allText += " " + v.toLowerCase();
+      }
+    }
+    var mapped  = getMappedFields(x, source);
+    var locBlob = mapped.location.toLowerCase();
 
-    var roleBlob = [mapped.name, mapped.title, mapped.notes, rawBlob].join(" ").toLowerCase();
-    var locBlob  = mapped.location.toLowerCase();
-    var skBlob   = [mapped.name, mapped.title, mapped.notes, rawBlob].join(" ").toLowerCase();
-
-    var roleMatch  = !rQ    || roleBlob.indexOf(rQ) >= 0;
-    var locMatch   = !lQ    || locBlob.indexOf(lQ)  >= 0;
-    var skillMatch = skArr.length === 0 || skArr.every(function(sk){ return skBlob.indexOf(sk) >= 0; });
+    var roleMatch  = !rQ    || allText.indexOf(rQ) >= 0;
+    var locMatch   = !lQ    || locBlob.indexOf(lQ) >= 0;
+    var skillMatch = skArr.length === 0 || skArr.every(function(sk){ return allText.indexOf(sk) >= 0; });
 
     return roleMatch && locMatch && skillMatch;
   }).map(function(x){ return getMappedFields(x, source); });
@@ -1027,31 +1026,27 @@ function getMappedFields(x, source) {
       source:   source
     };
   }
-  // Official SRFed Applicants Repository — confirmed field names from SharePoint XML
-  // field_31=First Name, field_19=Last Name, field_23=Email, field_16=Position
-  // field_26=City, field_27=State, field_35=Resume Link, field_30=Stage
-  var fn = x.field_31 || x.FirstName || "";
-  var ln = x.field_19 || x.LastName  || "";
-  var fullName = (fn + " " + ln).trim();
-  if (!fullName) fullName = "Unknown";
-
-  var city     = x.field_26 || x.City  || "";
-  var state    = x.field_27 || x.State || "";
-  var location = (city && state) ? city + ", " + state : (city || state || "");
-
-  // Resume link — field_35 may be a hyperlink object or string
-  var resumeRaw = x.field_35 || x.Resume_x0020_Link || "";
-  var resume = (resumeRaw && resumeRaw.Url) ? resumeRaw.Url : (typeof resumeRaw === "string" ? resumeRaw : "");
-
+  // Official SRFed Applicants Repository
+  // Confirmed from SharePoint XML: field_31=First Name, field_19=Last Name
+  // field_23=Email, field_16=Position, field_26=City, field_27=State
+  // field_35=Resume Link
+  var fn       = x.field_31 || "";
+  var ln       = x.field_19 || "";
+  var fullName = (fn + " " + ln).trim() || "Unknown";
+  var city     = x.field_26 || "";
+  var state    = x.field_27 || "";
+  var location = city && state ? city + ", " + state : (city || state || "");
+  var resumeRaw = x.field_35 || "";
+  var resume    = resumeRaw ? (resumeRaw.Url || (typeof resumeRaw === "string" ? resumeRaw : "")) : "";
   return {
     name:     fullName,
-    email:    x.field_23 || x.Email    || "",
+    email:    x.field_23 || "",
     phone:    x.WorkPhone || x.CellPhone || "",
-    linkedIn: x.LinkedInURL || "",
+    linkedIn: "",
     resume:   resume,
-    title:    x.field_16 || x.JobTitle || x.Position || "",
+    title:    x.field_16 || "",
     location: location,
-    notes:    x.field_30 || x.Notes    || "",
+    notes:    "",
     source:   source
   };
 }
@@ -1079,7 +1074,7 @@ function exportLookupCSV(){
 // ── UTILITIES ────────────────────────────────────────────────────
 function setB(p,t,m){var el=document.getElementById("sp-banner-"+p);if(!el)return;el.className="spb "+t;el.textContent=m;}
 function cpEl(id){var text=document.getElementById(id).textContent;navigator.clipboard.writeText(text).then(function(){toast("Copied!");}).catch(function(){var ta=document.createElement("textarea");ta.value=text;document.body.appendChild(ta);ta.select();document.execCommand("copy");document.body.removeChild(ta);toast("Copied!");});}
-function esc(s){return(s||"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");}
+function esc(s){var str=(!s||typeof s==="object")?"":String(s);return str.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");}
 function toast(msg){var t=document.getElementById("toast");t.textContent=msg;t.classList.add("show");setTimeout(function(){t.classList.remove("show");},2400);}
 </script>
 </body>
