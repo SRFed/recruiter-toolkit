@@ -418,6 +418,7 @@ input::placeholder,textarea::placeholder{color:var(--text4)}
     <button class="mbtn" id="mb1" onclick="selM(1)">&#128197; Paul Matt &mdash; 30 min</button>
     <button class="mbtn" id="mb2" onclick="selM(2)">&#128197; Paul Matt Leah</button>
     <button class="mbtn" id="mb3" onclick="selM(3)">&#128197; Paul Matt Kyra</button>
+    <button class="mbtn" id="mb4" onclick="selM(4)">&#128197; Paul</button>
   </div>
   <label>Format</label>
   <div class="pills" id="msgplat-group">
@@ -500,7 +501,8 @@ var MTS = [
   {l:"Paul Matt — 60 min", u:"https://meetings.hubspot.com/paul-scace/matt-paul-filter-meeting"},
   {l:"Paul Matt — 30 min", u:"https://meetings.hubspot.com/paul-scace/paul-matt-meeting-30-minutes"},
   {l:"Paul Matt Leah",          u:"https://meetings.hubspot.com/leah-hanson/matt-paul-leah-interview"},
-  {l:"Paul Matt Kyra",          u:"https://meetings.hubspot.com/paul-scace/paul-matt-kyra-general"}
+  {l:"Paul Matt Kyra",          u:"https://meetings.hubspot.com/paul-scace/paul-matt-kyra-general"},
+  {l:"Paul",                    u:"https://meetings.hubspot.com/paul-scace"}
 ];
 var SPC = {name:"Title",role:"CurrentRole",location:"Location",email:"Email",status:"Status",url:"ProfileURL",source:"Source",notes:"Notes",phone:"PhoneNumber"};
 var MCFG = {
@@ -976,10 +978,10 @@ async function runLookup() {
 }
 async function fetchApplicants(t,role,loc,skills) {
   var url=SPS+"/_api/web/lists/getbytitle('SRFed Applicants Repository')/items?$top=2000";
-  var r=await fetch(url,{headers:{"Authorization":"Bearer "+t,"Accept":"application/json;odata=verbose"}});
+  var r=await fetch(url,{headers:{"Authorization":"Bearer "+t,"Accept":"application/json;odata=nometadata"}});
   if (!r.ok) throw new Error("Cannot access SRFed Applicants Repository (HTTP "+r.status+"). Check permissions.");
   var d=await r.json();
-  return filterAndMap((d.d&&d.d.results)?d.d.results:[],role,loc,skills,"official");
+  return filterAndMap((d.value||d.d&&d.d.results||[]),role,loc,skills,"official");
 }
 async function fetchPotentials(t,role,loc,skills) {
   var sel=["Id",SPC.name,SPC.role,SPC.location,SPC.email,SPC.phone,SPC.url,SPC.notes,SPC.source].join(",");
@@ -1000,15 +1002,33 @@ function filterAndMap(items,role,loc,skills,source) {
       var v = x[k];
       if (!v) continue;
       if (typeof v === "string" && v.length > 1 && v.length < 500) {
+        // Skip odata metadata strings
+        if (v.indexOf("SP.Data") >= 0) continue;
+        if (v.indexOf("/_api/") >= 0) continue;
         allText += " " + v.toLowerCase();
       } else if (typeof v === "object" && !Array.isArray(v)) {
-        // Extract text from SharePoint lookup/person objects
-        var objStr = v.Title || v.LookupValue || v.Name || v.DisplayName || v.Value || "";
-        if (objStr) allText += " " + String(objStr).toLowerCase();
+        // Recursively extract all string values from SharePoint field objects
+        for (var ok in v) {
+          var ov = v[ok];
+          if (ov && typeof ov === "string" && ov.length > 1 && ov.length < 200) {
+            if (ov.indexOf("http") === 0) continue;
+            if (ov.indexOf("SP.") === 0) continue;
+            allText += " " + ov.toLowerCase();
+          }
+        }
       }
     }
     var mapped  = getMappedFields(x, source);
-    var locBlob = mapped.location.toLowerCase();
+    // For location: match only against state field directly (not full text)
+    // This prevents "MA" matching email domains like "@company.ma" etc
+    var locBlob;
+    if (source === "potential") {
+      locBlob = (x[SPC.location] || "").toLowerCase();
+    } else {
+      // field_27 = State. With nometadata returns plain string.
+      var stRaw = x.field_27 || "";
+      locBlob = (typeof stRaw === "string" ? stRaw : (stRaw.Title || stRaw.LookupValue || "")).toLowerCase();
+    }
 
     var roleMatch  = !rQ    || allText.indexOf(rQ) >= 0;
     var locMatch   = !lQ    || locBlob.indexOf(lQ) >= 0;
@@ -1040,27 +1060,44 @@ function getMappedFields(x, source) {
   function fieldStr(v) {
     if (!v) return "";
     if (typeof v === "string") return v;
+    if (typeof v === "number") return String(v);
     if (typeof v === "object") {
-      // Try common SharePoint object patterns
-      return v.Title || v.LookupValue || v.Name || v.DisplayName || v.Value || String(v);
+      // Try known SharePoint field patterns first
+      if (v.Title && typeof v.Title === "string") return v.Title;
+      if (v.LookupValue && typeof v.LookupValue === "string") return v.LookupValue;
+      if (v.Name && typeof v.Name === "string") return v.Name;
+      if (v.DisplayName && typeof v.DisplayName === "string") return v.DisplayName;
+      if (v.Value && typeof v.Value === "string") return v.Value;
+      // Last resort: find any string value in the object that looks like a name
+      for (var key in v) {
+        var val = v[key];
+        if (val && typeof val === "string" && val.length > 0 && val.length < 100) {
+          // Skip URLs, GUIDs, odata metadata
+          if (val.indexOf("http") === 0) continue;
+          if (val.indexOf("SP.") === 0) continue;
+          if (/^[0-9a-f]{8}-/i.test(val)) continue;
+          return val;
+        }
+      }
+      return "";
     }
     return String(v);
   }
   var fn       = fieldStr(x.field_31);
   var ln       = fieldStr(x.field_19);
   var fullName = (fn + " " + ln).trim() || "Unknown";
-  var city     = x.field_26 || "";
-  var state    = x.field_27 || "";
+  var city     = fieldStr(x.field_26);
+  var state    = fieldStr(x.field_27);
   var location = city && state ? city + ", " + state : (city || state || "");
   var resumeRaw = x.field_35 || "";
   var resume    = resumeRaw ? (resumeRaw.Url || (typeof resumeRaw === "string" ? resumeRaw : "")) : "";
   return {
     name:     fullName,
-    email:    x.field_23 || "",
+    email:    fieldStr(x.field_23) || "",
     phone:    x.WorkPhone || x.CellPhone || "",
     linkedIn: "",
     resume:   resume,
-    title:    x.field_16 || "",
+    title:    fieldStr(x.field_16) || "",
     location: location,
     notes:    "",
     source:   source
