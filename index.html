@@ -471,17 +471,23 @@ input::placeholder,textarea::placeholder{color:var(--text4)}
     <div>
       <label>Search which list</label>
       <div class="pills" id="lu-list-group" style="margin-top:8px">
-        <button class="pill on" onclick="setLuList('both',this)">Both Lists</button>
-        <button class="pill" onclick="setLuList('applicants',this)">Official Applicant Repository</button>
+        <button class="pill on" onclick="setLuList('applicants',this)">Official Applicant Repository</button>
         <button class="pill" onclick="setLuList('potentials',this)">Recruiting Potentials &mdash; Scratchpad</button>
+        <button class="pill" onclick="setLuList('both',this)">Both Lists</button>
       </div>
     </div>
   </div>
+  <label>Search mode</label>
+  <div class="pills" id="search-mode-group" style="margin-top:8px;margin-bottom:4px">
+    <button class="pill on" onclick="setSearchMode('literal',this)">&#128269; Literal</button>
+    <button class="pill" onclick="setSearchMode('ai',this)">&#10024; AI-Powered</button>
+  </div>
+  <p class="hint" id="search-mode-hint" style="margin-top:6px">Matches exact words and phrases across all available fields.</p>
   <div class="btn-row">
     <button class="btn primary" onclick="runLookup()">Search</button>
     <button class="btn" onclick="clearLookup()">Clear</button>
   </div>
-  <div class="ldg" id="lu-loading">Searching SharePoint...</div>
+  <div class="ldg" id="lu-loading">Searching...</div>
 </div>
 <div id="lu-results" style="display:none">
   <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
@@ -520,7 +526,7 @@ var SPSC = ["https://srfed.sharepoint.com/AllSites.Write"];
 // ── STATE ────────────────────────────────────────────────────────
 var MI=null, MA=null, cands=[], savSF=null, curQ="";
 var platS="linkedin", toneS="professional", msgS="linkedin", selMt=null, LT=null;
-var luResults=[], _luList="both";
+var luResults=[], _luList="applicants", _searchMode="literal";
 var _apiKey = sessionStorage.getItem("srfed_api_key") || "";
 
 // ── INIT ─────────────────────────────────────────────────────────
@@ -957,23 +963,143 @@ async function genOut() {
 function clrOut(){["on","ocr","oj","ow","osd"].forEach(function(id){document.getElementById(id).value="";}); document.getElementById("ores").style.display="none"; selMt=null; resetM();}
 
 // ── TALENT LOOKUP ─────────────────────────────────────────────────
+
+async function aiRankCandidates(candidates, role, loc, skills) {
+  if (!candidates.length) return [];
+
+  // Summarize candidates into a compact text block for Claude
+  // Cap at 300 candidates to stay within token limits
+  var pool = candidates.slice(0, 300);
+  var candidateList = pool.map(function(c, i) {
+    var parts = [
+      (i+1) + ". " + c.name,
+      c.title ? "Title: " + c.title : "",
+      c.location ? "Location: " + c.location : "",
+      c.stage ? "Stage: " + c.stage : "",
+      c.notes ? "Notes: " + c.notes : "",
+      c.email ? "Email: " + c.email : ""
+    ].filter(Boolean);
+    return parts.join(" | ");
+  }).join("\n");
+
+  var criteria = [];
+  if (role)   criteria.push("Role/title: " + role);
+  if (loc)    criteria.push("Location: " + loc);
+  if (skills) criteria.push("Skills/keywords: " + skills);
+
+  var prompt = "You are an HR assistant helping identify qualified candidates from an applicant database. " +
+    "Given the following search criteria and candidate list, return the numbers of ALL candidates who are " +
+    "a reasonable match — including people whose background, experience, or skills suggest they could do this work, " +
+    "even if their exact title doesn't match. Be inclusive rather than exclusive. " +
+    "Consider adjacent roles, transferable skills, and related experience.\n\n" +
+    "SEARCH CRITERIA:\n" + criteria.join("\n") + "\n\n" +
+    "CANDIDATES:\n" + candidateList + "\n\n" +
+    "Return ONLY a JSON array of matching candidate numbers (1-based integers), like: [1, 3, 7, 12]. " +
+    "No explanation, just the JSON array.";
+
+  try {
+    var resp = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      mode: "cors",
+      credentials: "omit",
+      headers: {
+        "Content-Type": "application/json",
+        "x-api-key": _apiKey,
+        "anthropic-version": "2023-06-01",
+        "anthropic-dangerous-direct-browser-access": "true"
+      },
+      body: JSON.stringify({
+        model: "claude-sonnet-4-5",
+        max_tokens: 1000,
+        messages: [{ role: "user", content: prompt }]
+      })
+    });
+    if (!resp.ok) { toast("AI search error: HTTP " + resp.status); return candidates; }
+    var data = await resp.json();
+    if (data.error) { toast("AI error: " + data.error.message); return candidates; }
+    var txt = (data.content||[]).map(function(b){return b.text||"";}).join("").trim();
+    var indices;
+    try {
+      var clean = txt.replace(/```json|```/g,"").trim();
+      indices = JSON.parse(clean);
+    } catch(e) {
+      // Try to extract array from text
+      var match = txt.match(/\[[\d,\s]+\]/);
+      if (match) { indices = JSON.parse(match[0]); }
+      else { toast("AI returned unexpected format — showing literal results"); return candidates; }
+    }
+    // Map 1-based indices back to candidates
+    return indices
+      .filter(function(n){ return n >= 1 && n <= pool.length; })
+      .map(function(n){ return pool[n-1]; });
+  } catch(e) {
+    toast("AI search failed: " + e.message + " — showing literal results");
+    return candidates;
+  }
+}
+
 function setLuList(val,btn){_luList=val;document.querySelectorAll("#lu-list-group .pill").forEach(function(b){b.classList.remove("on");});btn.classList.add("on");}
+function setSearchMode(val,btn){
+  _searchMode=val;
+  document.querySelectorAll("#search-mode-group .pill").forEach(function(b){b.classList.remove("on");});
+  btn.classList.add("on");
+  var hint=document.getElementById("search-mode-hint");
+  if(val==="literal"){
+    hint.textContent="Matches exact words and phrases across all available fields.";
+  } else {
+    hint.textContent="Claude reads each record and infers fit based on skills, experience, and context — not just exact words. Uses your API key.";
+  }
+}
 async function runLookup() {
   if (!MA) { toast("Sign in first"); return; }
-  var role=document.getElementById("lu-role").value.trim();
-  var loc=document.getElementById("lu-location").value.trim();
-  var skills=document.getElementById("lu-skills").value.trim();
+  var role   = document.getElementById("lu-role").value.trim();
+  var loc    = document.getElementById("lu-location").value.trim();
+  var skills = document.getElementById("lu-skills").value.trim();
   if (!role&&!loc&&!skills) { toast("Enter at least one search criterion"); return; }
-  document.getElementById("lu-loading").style.display="block";
+
+  var ldg = document.getElementById("lu-loading");
+  ldg.style.display="block";
   document.getElementById("lu-results").style.display="none";
-  var t=await getTok(); if(!t){document.getElementById("lu-loading").style.display="none";return;}
-  var all=[];
+
+  var t = await getTok();
+  if (!t) { ldg.style.display="none"; return; }
+
+  // Step 1: always fetch from SharePoint (literal pass — fast)
+  var all = [];
   try {
+    ldg.textContent = "Fetching candidates from SharePoint...";
     if (_luList==="both"||_luList==="applicants") { var ar=await fetchApplicants(t,role,loc,skills); all=all.concat(ar); }
     if (_luList==="both"||_luList==="potentials") { var pr=await fetchPotentials(t,role,loc,skills); all=all.concat(pr); }
-  } catch(e) { toast("Search error: "+e.message); document.getElementById("lu-loading").style.display="none"; return; }
-  luResults=all;
-  document.getElementById("lu-loading").style.display="none";
+  } catch(e) {
+    toast("Search error: "+e.message);
+    ldg.style.display="none";
+    ldg.textContent="Searching...";
+    return;
+  }
+
+  if (_searchMode === "ai") {
+    // Step 2: AI-powered — fetch a broader pool then let Claude rank/filter
+    ldg.textContent = "Fetching broader candidate pool...";
+    // For AI mode, re-fetch without role filter to get full list for Claude to reason over
+    var broadAll = [];
+    try {
+      if (_luList==="both"||_luList==="applicants") { var bar=await fetchApplicants(t,"",loc,""); broadAll=broadAll.concat(bar); }
+      if (_luList==="both"||_luList==="potentials") { var bpr=await fetchPotentials(t,"",loc,""); broadAll=broadAll.concat(bpr); }
+    } catch(e) { /* fall back to literal results */ broadAll = all; }
+
+    if (!_apiKey) {
+      toast("AI search requires your Anthropic API key — check the header");
+      ldg.style.display="none";
+      ldg.textContent="Searching...";
+      return;
+    }
+    ldg.textContent = "Claude is analyzing " + broadAll.length + " candidates...";
+    all = await aiRankCandidates(broadAll, role, loc, skills);
+  }
+
+  luResults = all;
+  ldg.style.display="none";
+  ldg.textContent="Searching...";
   renderLookup();
 }
 async function fetchApplicants(t,role,loc,skills) {
@@ -1086,38 +1212,28 @@ function getMappedFields(x, source) {
     }
     return String(v);
   }
-  // field_31 = Stage (NOT First Name) - confirmed from search results
-  // field_19 = Last Name - confirmed
-  // First Name field number unknown - try common patterns
-  var fn = fieldStr(x.FirstName) || 
-           fieldStr(x.field_32)  || 
-           fieldStr(x.field_33)  || 
-           fieldStr(x.field_34)  || 
-           fieldStr(x.field_36)  || 
-           fieldStr(x.field_37)  || "";
-  var ln = fieldStr(x.field_19) || fieldStr(x.LastName) || "";
+  // Confirmed field mappings from SharePoint console debug:
+  // field_32=First Name, field_19=Last Name, field_16=Position
+  // field_24=Phone, field_27=State, field_23=Email
+  // field_31=Stage, field_22=LinkedIn
+  var fn = fieldStr(x.field_32);
+  var ln = fieldStr(x.field_19);
   var fullName = (fn + " " + ln).trim() || ln || "Unknown";
-  // Debug: log first record's keys to console to identify First Name field
-  if (!getMappedFields._logged) {
-    getMappedFields._logged = true;
-    var keys = Object.keys(x).filter(function(k){ return k.indexOf("field_") === 0; }).sort();
-    console.log("SRFed Applicants Repository field keys:", keys);
-    console.log("Sample record values:", keys.slice(0,20).map(function(k){ return k + "=" + JSON.stringify(x[k]); }).join(", "));
-  }
   var city     = fieldStr(x.field_26);
   var state    = fieldStr(x.field_27);
   var location = city && state ? city + ", " + state : (city || state || "");
   var resumeRaw = x.field_35 || "";
   var resume    = resumeRaw ? (resumeRaw.Url || (typeof resumeRaw === "string" ? resumeRaw : "")) : "";
+  var stage = fieldStr(x.field_31) || "";
   return {
     name:     fullName,
     email:    fieldStr(x.field_23) || "",
-    phone:    x.WorkPhone || x.CellPhone || "",
-    linkedIn: "",
+    phone:    fieldStr(x.field_24) || "",
+    linkedIn: fieldStr(x.field_22) || "",
     resume:   resume,
     title:    fieldStr(x.field_16) || "",
     location: location,
-    notes:    "",
+    stage:    stage,
     source:   source
   };
 }
@@ -1130,11 +1246,13 @@ function renderLookup() {
     var srcTag=c.source==="official"?'<span class="lu-source-tag official">Applicant</span>':'<span class="lu-source-tag potential">Potential</span>';
     var liLink=c.linkedIn?'<a class="lu-link" href="'+(c.linkedIn.indexOf("http")===0?esc(c.linkedIn):"https://"+esc(c.linkedIn))+'" target="_blank">LinkedIn</a>':'<span style="color:var(--text4)">&#8212;</span>';
     var resLink=c.resume?'<a class="lu-link" href="'+esc(c.resume)+'" target="_blank">Resume</a>':'<span style="color:var(--text4)">&#8212;</span>';
-    return "<tr><td>"+srcTag+"</td><td><strong>"+esc(c.name)+"</strong>"+(c.title?"<br><span style=\"font-size:13px;color:var(--text3)\">"+esc(c.title)+"</span>":"")+"</td><td>"+esc(c.location)+"</td><td>"+(c.email?'<a class="lu-link" href="mailto:'+esc(c.email)+'">'+esc(c.email)+"</a>":"&#8212;")+"</td><td>"+esc(c.phone)+"</td><td>"+liLink+"</td><td>"+resLink+"</td></tr>";
+    var stageHtml = c.stage ? "<br><span style=\"font-size:11px;color:var(--text4);font-style:italic\">"+esc(c.stage)+"</span>" : "";
+    return "<tr><td>"+srcTag+stageHtml+"</td><td><strong>"+esc(c.name)+"</strong>"+(c.title?"<br><span style=\"font-size:12px;color:var(--text3)\">"+esc(c.title)+"</span>":"")+"</td><td>"+esc(c.location)+"</td><td>"+(c.email?'<a class="lu-link" href="mailto:'+esc(c.email)+'">'+esc(c.email)+"</a>":"&#8212;")+"</td><td>"+esc(c.phone)+"</td><td>"+liLink+"</td><td>"+resLink+"</td></tr>";
   }).join("");
-  out.innerHTML='<div class="lu-table-wrap"><table class="lu-table"><thead><tr><th>Source</th><th>Name / Title</th><th>Location</th><th>Email</th><th>Phone</th><th>LinkedIn</th><th>Resume</th></tr></thead><tbody>'+rows+'</tbody></table></div>';
+  out.innerHTML='<div class="lu-table-wrap"><table class="lu-table"><thead><tr><th>Source</th><th>Name</th><th>Location</th><th>Email</th><th>Phone</th><th>LinkedIn</th><th>Resume</th></tr></thead><tbody>'+rows+'</tbody></table></div>';
 }
-function clearLookup(){["lu-role","lu-location","lu-skills"].forEach(function(id){document.getElementById(id).value="";}); _luList="both"; document.querySelectorAll("#lu-list-group .pill").forEach(function(b){b.classList.remove("on");}); document.querySelector("#lu-list-group .pill").classList.add("on"); document.getElementById("lu-results").style.display="none"; luResults=[];}
+function clearLookup(){["lu-role","lu-location","lu-skills"].forEach(function(id){document.getElementById(id).value="";}); _luList="both"; document.querySelectorAll("#lu-list-group .pill").forEach(function(b){b.classList.remove("on");}); // reset to first pill (Official Applicant Repository)
+document.querySelectorAll("#lu-list-group .pill").forEach(function(b,i){if(i===0)b.classList.add("on");}); document.getElementById("lu-results").style.display="none"; luResults=[];}
 function exportLookupCSV(){
   if(!luResults.length){toast("No results to export");return;}
   var cols=["Source","Name","Title","Location","Email","Phone","LinkedIn","Resume"];
