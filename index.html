@@ -27,10 +27,10 @@ body{background:var(--bg);color:var(--text);font-family:"Inter",sans-serif;font-
 .main{margin-left:260px;flex:1;padding:0 52px 52px}
 
 /* LOGO AREA - white rectangle */
-.logo-area{padding:20px 18px 18px;border-bottom:2px solid rgba(255,255,255,.1);display:flex;align-items:center;gap:12px;background:#fff}
-.logo-img{width:48px;height:48px;object-fit:contain;display:block;flex-shrink:0}
-.logo-org{font-size:9px;letter-spacing:.16em;text-transform:uppercase;color:#6b7280;font-weight:600}
-.logo-name{font-size:17px;font-weight:700;color:#0a1e3d;line-height:1.15}
+.logo-area{padding:32px 24px 30px;border-bottom:2px solid rgba(255,255,255,.1);display:flex;align-items:center;gap:16px;background:#fff}
+.logo-img{width:72px;height:72px;object-fit:contain;display:block;flex-shrink:0}
+.logo-org{font-size:10px;letter-spacing:.16em;text-transform:uppercase;color:#6b7280;font-weight:600;margin-bottom:4px}
+.logo-name{font-size:22px;font-weight:700;color:#0a1e3d;line-height:1.2}
 .logo-name span{color:#2270e0}
 
 /* NAV */
@@ -164,8 +164,8 @@ input::placeholder,textarea::placeholder{color:var(--text4)}
 .spb.info{background:#eff6ff;color:#1d4ed8;border-color:#bfdbfe;display:block}
 
 /* DROP ZONE */
-.dz-intro{background:#fffbeb;border:1.5px solid #fcd34d;border-radius:var(--radius);padding:13px 16px;margin-bottom:14px;font-size:14px;color:#92400e;line-height:1.6}
-.dz-intro strong{color:#78350f}
+.dz-intro{background:#f0fdfa;border:1.5px solid #5eead4;border-radius:var(--radius);padding:13px 16px;margin-bottom:14px;font-size:14px;color:#0f766e;line-height:1.6}
+.dz-intro strong{color:#0d5c55}
 .dz{border:2px dashed var(--blue3);border-radius:var(--radius-lg);padding:32px 20px;text-align:center;cursor:pointer;transition:all .2s;background:var(--blue-pale);margin-bottom:8px}
 .dz:hover,.dz.over{background:#dbeafe;border-color:var(--blue2)}
 .dzi{font-size:38px;margin-bottom:10px}
@@ -262,17 +262,7 @@ input::placeholder,textarea::placeholder{color:var(--text4)}
     <div class="apikey-saved">&#128273; API key saved for this session <button class="apikey-change-btn" onclick="changeApiKey()">Change</button></div>
   </div>
 
-  <div class="topbar-divider" id="div2">&#8250;</div>
 
-  <!-- Step 3: Ready -->
-  <div class="topbar-step pending" id="step3-pending">
-    <span class="step-num">3</span>
-    <span>Ready</span>
-  </div>
-  <div class="topbar-step done" id="step3-done" style="display:none">
-    <span class="step-num">&#10003;</span>
-    <span>All systems go</span>
-  </div>
 </div>
 <div class="panel" id="panel-search">
 <div class="page-title">Candidate Search</div>
@@ -343,6 +333,7 @@ input::placeholder,textarea::placeholder{color:var(--text4)}
   <div class="stat"><div class="sn" id="st-contacted">0</div><div class="sl">Contacted</div></div>
   <div class="stat"><div class="sn" id="st-added">0</div><div class="sl">In Repository</div></div>
 </div>
+<hr style="border:none;border-top:1.5px solid var(--border);margin:8px 0 24px"/>
 <div class="card">
   <div class="sec">Import from resume</div>
   <div class="dz-intro">&#128161; <strong>How this works:</strong> Drop a resume (PDF or Word doc) below. Claude extracts the candidate's details and pre-fills the form. <strong>Review the fields, then click Save to SharePoint.</strong> Nothing is saved until you do.</div>
@@ -380,6 +371,7 @@ input::placeholder,textarea::placeholder{color:var(--text4)}
   </div>
   <div class="ldg" id="cld">Saving to SharePoint...</div>
 </div>
+<hr style="border:none;border-top:1.5px solid var(--border);margin:4px 0 24px"/>
 <div class="fb">
   <input type="text" id="fsrch" placeholder="Search name, role, location, notes..." oninput="renderC()"/>
   <select id="fstat" onchange="renderC()" style="min-width:170px"><option value="">All statuses</option><option value="New">New</option><option value="Contacted">Contacted</option><option value="Added to Repository">Added to Repository</option></select>
@@ -849,10 +841,9 @@ async function runLookup() {
   renderLookup();
 }
 async function fetchApplicants(t,role,loc,skills) {
-  var url=SPS+"/_api/web/lists/getbytitle('Applicants_Repository 2')/items?$top=2000";
+  var url=SPS+"/_api/web/lists/getbytitle('SRFed Applicants Repository')/items?$top=2000&$select=Id,Title,FirstName,LastName,Email,WorkPhone,CellPhone,JobTitle,Location,City,State,LinkedInURL,Resume_x0020_Link,field_27,field_1,field_2,field_3,field_4,field_5,field_6,field_7,field_8,field_9,field_10,field_11,field_12";
   var r=await fetch(url,{headers:{"Authorization":"Bearer "+t,"Accept":"application/json;odata=verbose"}});
-  if (!r.ok) { url=SPS+"/_api/web/lists/getbytitle('Applicants Repository 2')/items?$top=2000"; r=await fetch(url,{headers:{"Authorization":"Bearer "+t,"Accept":"application/json;odata=verbose"}}); }
-  if (!r.ok) throw new Error("Cannot access Applicants Repository (HTTP "+r.status+")");
+  if (!r.ok) throw new Error("Cannot access SRFed Applicants Repository (HTTP "+r.status+"). Check permissions.");
   var d=await r.json();
   return filterAndMap((d.d&&d.d.results)?d.d.results:[],role,loc,skills,"official");
 }
