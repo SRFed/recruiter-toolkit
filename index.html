@@ -524,7 +524,7 @@ window.addEventListener("load", async function(){
   try {
     MI = new msal.PublicClientApplication(MCFG);
     await MI.initialize();
-    var r = await MI.handleRedirectPromise();
+    var r = await MI.handleRedirectPromise().catch(function(e){ console.warn("redirect promise error:", e); return null; });
     if (r && r.account) {
       MA = r.account;
       onMsIn();
@@ -544,25 +544,27 @@ window.addEventListener("load", async function(){
 // ── AUTH FLOW ────────────────────────────────────────────────────
 async function toggleAuth() {
   if (MA) {
-    try { await MI.logoutPopup({account:MA}); } catch(e) {}
     MA = null;
     _apiKey = "";
     sessionStorage.removeItem("srfed_api_key");
-    onMsOut();
+    try {
+      await MI.logoutRedirect({
+        account: MA,
+        postLogoutRedirectUri: "https://srfed.github.io/recruiter-toolkit/"
+      });
+    } catch(e) {
+      onMsOut();
+    }
   } else {
     try {
-      var r = await MI.loginPopup({
+      await MI.loginRedirect({
         scopes: SPSC,
         prompt: "select_account",
         redirectUri: "https://srfed.github.io/recruiter-toolkit/"
       });
-      MA = r.account;
-      onMsIn();
     } catch(e) {
-      if (e.errorCode !== "user_cancelled") {
-        console.error("Login error:", e);
-        toast("Sign-in failed: " + (e.errorMessage || e.message || e.errorCode));
-      }
+      console.error("Login error:", e);
+      toast("Sign-in failed: " + (e.errorMessage || e.message || e.errorCode));
     }
   }
 }
