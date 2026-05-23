@@ -186,7 +186,15 @@ input::placeholder,textarea::placeholder{color:var(--text4)}
 /* TALENT LOOKUP TABLE */
 .lu-table-wrap{max-height:70vh;overflow-y:auto;border-radius:var(--radius-lg);border:1.5px solid var(--border);box-shadow:var(--shadow)}
 .lu-table{width:100%;border-collapse:collapse;background:#fff;}
-.lu-table th{background:var(--navy);color:#fff;font-size:12px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;padding:12px 16px;text-align:left;white-space:nowrap;position:sticky;top:0;z-index:10;}
+.lu-table th{background:var(--navy);color:#fff;font-size:12px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;padding:10px 16px;text-align:left;white-space:nowrap;position:sticky;top:0;z-index:10;cursor:pointer;user-select:none}
+.lu-table th:hover{background:#1a3060}
+.lu-table th .sort-icon{margin-left:5px;opacity:0.45;font-style:normal;font-size:11px}
+.lu-table th.sort-asc .sort-icon::after{content:"▲";opacity:1}
+.lu-table th.sort-desc .sort-icon::after{content:"▼";opacity:1}
+.lu-table th:not(.sort-asc):not(.sort-desc) .sort-icon::after{content:"⇅"}
+.lu-filter-row th{background:#f0f4ff;position:sticky;top:41px;z-index:9;padding:5px 8px}
+.lu-filter-input{width:100%;font-size:12px;padding:4px 8px;border:1px solid var(--border);border-radius:4px;font-family:"Inter",sans-serif;background:#fff;color:var(--text);outline:none}
+.lu-filter-input:focus{border-color:var(--blue2)}
 .lu-table td{padding:12px 16px;font-size:14px;color:var(--text2);border-bottom:1px solid var(--border);vertical-align:top}
 .lu-table tr:last-child td{border-bottom:none}
 .lu-table tr:hover td{background:var(--surface2)}
@@ -471,9 +479,11 @@ input::placeholder,textarea::placeholder{color:var(--text4)}
     <div>
       <label>Search which list</label>
       <div class="pills" id="lu-list-group" style="margin-top:8px">
-        <button class="pill on" onclick="setLuList('applicants',this)">Official Applicant Repository</button>
-        <button class="pill" onclick="setLuList('potentials',this)">Recruiting Potentials &mdash; Scratchpad</button>
-        <button class="pill" onclick="setLuList('both',this)" style="flex:1 1 100%;text-align:center">Both Lists</button>
+        <div style="display:flex;gap:8px;width:100%">
+          <button class="pill on" style="flex:1" onclick="setLuList('applicants',this)">Official Applicant Repository</button>
+          <button class="pill" style="flex:1" onclick="setLuList('potentials',this)">Recruiting Potentials &mdash; Scratchpad</button>
+        </div>
+        <button class="pill" style="width:100%;text-align:center;margin-top:0" onclick="setLuList('both',this)">Both Lists</button>
       </div>
     </div>
   </div>
@@ -1237,21 +1247,91 @@ function getMappedFields(x, source) {
     source:   source
   };
 }
+// Sort/filter state for lookup table
+var _luSort = {col:-1, dir:1};
+var _luFilters = {};
+var LU_COLS = ["source","name","location","email","phone","linkedIn","resume"];
+var LU_LABELS = ["Source","Name","Location","Email","Phone","LinkedIn","Resume"];
+
 function renderLookup() {
-  document.getElementById("lu-count").textContent=luResults.length+" result"+(luResults.length!==1?"s":"")+" found";
   document.getElementById("lu-results").style.display="block";
   var out=document.getElementById("lu-list-output");
-  if (!luResults.length) { out.innerHTML='<div class="lu-no-results">No candidates found matching your criteria. Try broadening your search.</div>'; return; }
-  var rows=luResults.map(function(c){
-    var srcTag=c.source==="official"?'<span class="lu-source-tag official">Applicant</span>':'<span class="lu-source-tag potential">Potential</span>';
-    var liLink=c.linkedIn?'<a class="lu-link" href="'+(c.linkedIn.indexOf("http")===0?esc(c.linkedIn):"https://"+esc(c.linkedIn))+'" target="_blank">LinkedIn</a>':'<span style="color:var(--text4)">&#8212;</span>';
-    var resLink=c.resume?'<a class="lu-link" href="'+esc(c.resume)+'" target="_blank">Resume</a>':'<span style="color:var(--text4)">&#8212;</span>';
-    var stageHtml = c.stage ? "<br><span style=\"font-size:11px;color:var(--text4);font-style:italic\">"+esc(c.stage)+"</span>" : "";
-    return "<tr><td>"+srcTag+stageHtml+"</td><td><strong>"+esc(c.name)+"</strong>"+(c.title?"<br><span style=\"font-size:12px;color:var(--text3)\">"+esc(c.title)+"</span>":"")+"</td><td>"+esc(c.location)+"</td><td>"+(c.email?'<a class="lu-link" href="mailto:'+esc(c.email)+'">'+esc(c.email)+"</a>":"&#8212;")+"</td><td>"+esc(c.phone)+"</td><td>"+liLink+"</td><td>"+resLink+"</td></tr>";
-  }).join("");
-  out.innerHTML='<div class="lu-table-wrap"><table class="lu-table"><thead><tr><th>Source</th><th>Name</th><th>Location</th><th>Email</th><th>Phone</th><th>LinkedIn</th><th>Resume</th></tr></thead><tbody>'+rows+'</tbody></table></div>';
+  if (!luResults.length) {
+    document.getElementById("lu-count").textContent="0 results found";
+    out.innerHTML='<div class="lu-no-results">No candidates found matching your criteria. Try broadening your search.</div>';
+    return;
+  }
+  renderLookupTable();
 }
-function clearLookup(){["lu-role","lu-location","lu-skills"].forEach(function(id){document.getElementById(id).value="";}); _luList="both"; document.querySelectorAll("#lu-list-group .pill").forEach(function(b){b.classList.remove("on");}); // reset to first pill (Official Applicant Repository)
+
+function renderLookupTable() {
+  var out = document.getElementById("lu-list-output");
+  // Apply column filters
+  var filtered = luResults.filter(function(c) {
+    return LU_COLS.every(function(col, i) {
+      var fval = (_luFilters[i]||"").toLowerCase().trim();
+      if (!fval) return true;
+      return getLuCell(c,col).toLowerCase().indexOf(fval) >= 0;
+    });
+  });
+  // Apply sort
+  if (_luSort.col >= 0) {
+    var sortCol = LU_COLS[_luSort.col];
+    var sortDir = _luSort.dir;
+    filtered = filtered.slice().sort(function(a,b){
+      var av=getLuCell(a,sortCol).toLowerCase();
+      var bv=getLuCell(b,sortCol).toLowerCase();
+      return av<bv?-sortDir:av>bv?sortDir:0;
+    });
+  }
+  document.getElementById("lu-count").textContent = filtered.length+" result"+(filtered.length!==1?"s":"")+" found"+
+    (filtered.length<luResults.length?" ("+luResults.length+" total, filtered)":"");
+  // Headers with sort indicators
+  var headerCells = LU_LABELS.map(function(label,i){
+    var cls=_luSort.col===i?(_luSort.dir===1?"sort-asc":"sort-desc"):"";
+    return '<th class="'+cls+'" onclick="luSortBy('+i+')">'+label+' <i class="sort-icon"></i></th>';
+  }).join("");
+  // Filter inputs row
+  var filterCells = LU_COLS.map(function(col,i){
+    var val=_luFilters[i]||"";
+    return '<th><input class="lu-filter-input" type="text" placeholder="Filter..." value="'+esc(val)+'" oninput="luFilter('+i+',this.value)"/></th>';
+  }).join("");
+  // Data rows
+  var rows = filtered.map(function(c){
+    var srcTag=c.source==="official"?'<span class="lu-source-tag official">Applicant</span>':'<span class="lu-source-tag potential">Potential</span>';
+    var stageHtml=c.stage?'<br><span style="font-size:11px;color:var(--text4);font-style:italic">'+esc(c.stage)+"</span>":"";
+    var emailCell=c.email?'<a class="lu-link" href="mailto:'+esc(c.email)+'">'+esc(c.email)+"</a>":"&#8212;";
+    var liCell=c.linkedIn?'<a class="lu-link" href="'+(c.linkedIn.indexOf("http")===0?esc(c.linkedIn):"https://"+esc(c.linkedIn))+'" target="_blank">LinkedIn</a>':"&#8212;";
+    var resCell=c.resume?'<a class="lu-link" href="'+esc(c.resume)+'" target="_blank">Resume</a>':"&#8212;";
+    return "<tr><td>"+srcTag+stageHtml+"</td><td><strong>"+esc(c.name)+"</strong>"+(c.title?'<br><span style="font-size:12px;color:var(--text3)">'+esc(c.title)+"</span>":"")+
+      "</td><td>"+esc(c.location)+"</td><td>"+emailCell+"</td><td>"+esc(c.phone)+"</td><td>"+liCell+"</td><td>"+resCell+"</td></tr>";
+  }).join("");
+  out.innerHTML='<div class="lu-table-wrap"><table class="lu-table"><thead><tr>'+headerCells+'</tr><tr class="lu-filter-row">'+filterCells+'</tr></thead><tbody>'+rows+'</tbody></table></div>';
+}
+
+function getLuCell(c,col){
+  if(col==="source")   return c.source==="official"?"Applicant":"Potential";
+  if(col==="name")     return c.name||"";
+  if(col==="location") return c.location||"";
+  if(col==="email")    return c.email||"";
+  if(col==="phone")    return c.phone||"";
+  if(col==="linkedIn") return c.linkedIn?"LinkedIn":"";
+  if(col==="resume")   return c.resume?"Resume":"";
+  return "";
+}
+
+function luSortBy(colIdx){
+  if(_luSort.col===colIdx){_luSort.dir*=-1;}else{_luSort.col=colIdx;_luSort.dir=1;}
+  renderLookupTable();
+}
+
+function luFilter(colIdx,val){
+  _luFilters[colIdx]=val;
+  renderLookupTable();
+}
+
+
+function clearLookup(){ _luSort={col:-1,dir:1}; _luFilters={}; _luSort={col:-1,dir:1}; _luFilters={}; ["lu-role","lu-location","lu-skills"].forEach(function(id){document.getElementById(id).value="";}); _luList="both"; document.querySelectorAll("#lu-list-group .pill").forEach(function(b){b.classList.remove("on");}); // reset to first pill (Official Applicant Repository)
 document.querySelectorAll("#lu-list-group .pill").forEach(function(b,i){if(i===0)b.classList.add("on");}); document.getElementById("lu-results").style.display="none"; luResults=[];}
 function exportLookupCSV(){
   if(!luResults.length){toast("No results to export");return;}
