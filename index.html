@@ -777,31 +777,92 @@ function dzLv(){document.getElementById("dz").classList.remove("over");}
 function dzDp(e){e.preventDefault();document.getElementById("dz").classList.remove("over");var f=e.dataTransfer.files[0];if(f)handlePdf(f);}
 async function handlePdf(file) {
   if (!file) return;
-  var name=file.name.toLowerCase(), isPdf=name.endsWith(".pdf"), isDocx=name.endsWith(".docx")||name.endsWith(".doc");
+  var fname=file.name.toLowerCase();
+  var isPdf=fname.endsWith(".pdf");
+  var isDocx=fname.endsWith(".docx")||fname.endsWith(".doc");
   if (!isPdf&&!isDocx) { toast("PDF or Word (.docx) files only"); return; }
-  if (!_apiKey) { toast("Enter your Anthropic API key in the header first"); return; }
-  var st=document.getElementById("pdfs"), notice=document.getElementById("review-notice");
-  notice.style.display="none"; st.className="pdfs ld"; st.textContent="Reading "+file.name+"...";
+  if (!_apiKey) { toast("Enter your Anthropic API key first"); return; }
+  var st=document.getElementById("pdfs");
+  var notice=document.getElementById("review-notice");
+  notice.style.display="none";
+  st.className="pdfs ld";
+  st.textContent="Reading "+file.name+"...";
   try {
-    var b64=await new Promise(function(res,rej){var r=new FileReader();r.onload=function(){res(r.result.split(",")[1]);};r.onerror=rej;r.readAsDataURL(file);});
+    var b64=await new Promise(function(res,rej){
+      var r=new FileReader();
+      r.onload=function(){res(r.result.split(",")[1]);};
+      r.onerror=function(){rej(new Error("File read failed"));};
+      r.readAsDataURL(file);
+    });
     st.textContent="Extracting details with AI...";
-    var mediaType=isPdf?"application/pdf":"application/vnd.openxmlformats-officedocument.wordprocessingml.document";
-    var resp=await fetch("https://api.anthropic.com/v1/messages",{method:"POST",headers:{"Content-Type":"application/json","x-api-key":_apiKey,"anthropic-version":"2023-06-01","anthropic-dangerous-direct-browser-ipc":"true"},body:JSON.stringify({model:"claude-sonnet-4-5",max_tokens:700,messages:[{role:"user",content:[{type:"document",source:{type:"base64",media_type:mediaType,data:b64}},{type:"text",text:"Extract candidate info from this resume. Return ONLY a raw JSON object (no markdown, no code fences) with exactly these keys: name, role, location, email, phone, url, notes. Values should be strings. If not found use empty string."}]}]})});
-    var data=await resp.json();
-    if (data.error) { st.className="pdfs er"; st.textContent="AI error: "+data.error.message; return; }
-    var txt=(data.content||[]).map(function(b){return b.text||"";}).join("");
-    var info; try { info=JSON.parse(txt.replace(/```json|```/g,"").trim()); } catch(e) { st.className="pdfs er"; st.textContent="Could not parse resume. Try again or enter manually."; return; }
-    if(info.name)document.getElementById("cn").value=info.name;
-    if(info.role)document.getElementById("cr").value=info.role;
-    if(info.location)document.getElementById("cl").value=info.location;
-    if(info.email)document.getElementById("ce").value=info.email;
-    if(info.phone)document.getElementById("cp").value=info.phone;
-    if(info.url)document.getElementById("cu").value=info.url;
-    if(info.notes)document.getElementById("cno").value=info.notes;
-    document.getElementById("cso").value="Resume upload";
-    st.className="pdfs ok"; st.textContent="✓ Details extracted from "+file.name;
-    notice.style.display="block"; toast("Resume parsed! Review fields below.");
-  } catch(e) { st.className="pdfs er"; st.textContent="Error: " + (e.message||"Unknown error") + ". Check console for details."; console.error("PDF parse error:", e); }
+    var mediaType = isPdf ? "application/pdf" : "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+    var payload = {
+      model: "claude-sonnet-4-5",
+      max_tokens: 700,
+      messages: [{
+        role: "user",
+        content: [
+          {
+            type: "document",
+            source: { type: "base64", media_type: mediaType, data: b64 }
+          },
+          {
+            type: "text",
+            text: "Extract candidate information from this resume document. Return ONLY a valid JSON object with no markdown formatting, no code fences, just raw JSON. Use exactly these keys: name (full name), role (most recent job title), location (city and state), email, phone (format as (XXX) XXX-XXXX if possible), url (LinkedIn URL if present, else empty string), notes (2-3 sentence summary of top qualifications). Use empty string for any field not found."
+          }
+        ]
+      }]
+    };
+    var resp = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-api-key": _apiKey,
+        "anthropic-version": "2023-06-01",
+        "anthropic-dangerous-direct-browser-ipc": "true"
+      },
+      body: JSON.stringify(payload)
+    });
+    if (!resp.ok) {
+      var errText = await resp.text();
+      st.className="pdfs er";
+      st.textContent="API error ("+resp.status+"): "+errText.slice(0,120);
+      return;
+    }
+    var data = await resp.json();
+    if (data.error) {
+      st.className="pdfs er";
+      st.textContent="AI error: "+data.error.message;
+      return;
+    }
+    var txt = (data.content||[]).map(function(b){return b.text||"";}).join("");
+    var info;
+    try {
+      var clean = txt.replace(/```json/g,"").replace(/```/g,"").trim();
+      info = JSON.parse(clean);
+    } catch(e) {
+      st.className="pdfs er";
+      st.textContent="Could not parse AI response. Try again or enter manually.";
+      console.error("Parse error. Raw response:", txt);
+      return;
+    }
+    if(info.name)     document.getElementById("cn").value  = info.name;
+    if(info.role)     document.getElementById("cr").value  = info.role;
+    if(info.location) document.getElementById("cl").value  = info.location;
+    if(info.email)    document.getElementById("ce").value  = info.email;
+    if(info.phone)    document.getElementById("cp").value  = info.phone;
+    if(info.url)      document.getElementById("cu").value  = info.url;
+    if(info.notes)    document.getElementById("cno").value = info.notes;
+    document.getElementById("cso").value = "Resume upload";
+    st.className="pdfs ok";
+    st.textContent="✓ Details extracted from "+file.name+" — review and save below";
+    notice.style.display="block";
+    toast("Resume parsed! Review fields below.");
+  } catch(e) {
+    st.className="pdfs er";
+    st.textContent="Error: "+(e.message||"Unknown error");
+    console.error("PDF error:", e);
+  }
 }
 
 // ── SEARCH ───────────────────────────────────────────────────────
@@ -831,24 +892,60 @@ function openSearch(){var q=encodeURIComponent(curQ);window.open(platS==="linked
 function selM(i){if(selMt===i){selMt=null;resetM();toast("Meeting link removed");}else{selMt=i;resetM();var b=document.getElementById("mb"+i);b.classList.add("sel");b.textContent="✓ "+MTS[i].l+" — selected";toast("Meeting link selected");}}
 function resetM(){MTS.forEach(function(m,i){var b=document.getElementById("mb"+i);if(b){b.classList.remove("sel");b.innerHTML="&#128197; "+m.l;}});}
 async function genOut() {
-  var name=document.getElementById("on").value.trim(), job=document.getElementById("oj").value.trim();
-  if(!name||!job){toast("Name and job title required");return;}
-  if(!_apiKey){toast("Enter your Anthropic API key in the header first");return;}
-  var sender=document.getElementById("osd").value.trim()||"the recruiter";
-  var tM={professional:"professional and polished",friendly:"friendly and casual",brief:"very brief, under 80 words"};
-  var pM={linkedin:"LinkedIn direct message",email:"cold recruiting email, put Subject: on the first line then blank line then body"};
-  var sc=""; if(selMt!==null)sc="\nNaturally invite the candidate to schedule time at: "+MTS[selMt].u;
-  var prompt="Write a "+tM[toneS]+" "+pM[msgS]+" recruiting outreach for "+CO+".\nCandidate: "+name+"\nCurrent role: "+(document.getElementById("ocr").value.trim()||"not specified")+"\nHiring for: "+job+"\nStrong fit because: "+(document.getElementById("ow").value.trim()||"their background aligns well")+"\nSender: "+sender+" at "+CO+"\nSign off with "+sender+" and "+CO+"."+sc+"\nWrite ONLY the message. Start directly with the greeting or Subject line.";
-  document.getElementById("old").style.display="block";
-  document.getElementById("ores").style.display="none";
+  var name = document.getElementById("on").value.trim();
+  var job  = document.getElementById("oj").value.trim();
+  if (!name||!job) { toast("Name and job title required"); return; }
+  if (!_apiKey)    { toast("Enter your Anthropic API key first"); return; }
+  var sender = document.getElementById("osd").value.trim() || "the recruiter";
+  var tM = {professional:"professional and polished", friendly:"friendly and casual", brief:"very brief, under 80 words"};
+  var pM = {linkedin:"LinkedIn direct message", email:"cold recruiting email, put Subject: on the first line then a blank line then the body"};
+  var sc = "";
+  if (selMt !== null) sc = "\nInclude a natural sentence inviting the candidate to schedule time at: " + MTS[selMt].u;
+  var prompt = "Write a " + tM[toneS] + " " + pM[msgS] + " recruiting outreach on behalf of " + CO + ".\n" +
+    "Candidate name: " + name + "\n" +
+    "Their current role: " + (document.getElementById("ocr").value.trim() || "not specified") + "\n" +
+    "Job being hired for: " + job + "\n" +
+    "Why they are a strong fit: " + (document.getElementById("ow").value.trim() || "their background aligns well with the role") + "\n" +
+    "Sender name: " + sender + "\n" +
+    "Company: " + CO + "\n" +
+    "Sign the message with " + sender + " and " + CO + "." + sc + "\n" +
+    "Write ONLY the message. No explanation, no preamble. Start directly with the greeting or Subject line.";
+  document.getElementById("old").style.display = "block";
+  document.getElementById("ores").style.display = "none";
   try {
-    var res=await fetch("https://api.anthropic.com/v1/messages",{method:"POST",headers:{"Content-Type":"application/json","x-api-key":_apiKey,"anthropic-version":"2023-06-01","anthropic-dangerous-direct-browser-ipc":"true"},body:JSON.stringify({model:"claude-sonnet-4-5",max_tokens:1000,messages:[{role:"user",content:prompt}]})});
-    var data=await res.json();
-    if(data.error){toast("API Error: "+data.error.message+" (type: "+data.error.type+")");document.getElementById("old").style.display="none";return;}
-    document.getElementById("oout").textContent=(data.content||[]).map(function(b){return b.text||"";}).join("");
-    document.getElementById("ores").style.display="block";
-  } catch(e){ console.error("Outreach error:",e); toast("Error: " + (e.message||"Something went wrong")); }
-  document.getElementById("old").style.display="none";
+    var res = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-api-key": _apiKey,
+        "anthropic-version": "2023-06-01",
+        "anthropic-dangerous-direct-browser-ipc": "true"
+      },
+      body: JSON.stringify({
+        model: "claude-sonnet-4-5",
+        max_tokens: 1000,
+        messages: [{ role: "user", content: prompt }]
+      })
+    });
+    if (!res.ok) {
+      var errTxt = await res.text();
+      toast("API error ("+res.status+"): "+errTxt.slice(0,100));
+      document.getElementById("old").style.display="none";
+      return;
+    }
+    var data = await res.json();
+    if (data.error) {
+      toast("Error: " + data.error.message);
+      document.getElementById("old").style.display="none";
+      return;
+    }
+    document.getElementById("oout").textContent = (data.content||[]).map(function(b){return b.text||"";}).join("");
+    document.getElementById("ores").style.display = "block";
+  } catch(e) {
+    console.error("Outreach error:", e);
+    toast("Failed to fetch. Check that your API key is valid and try again.");
+  }
+  document.getElementById("old").style.display = "none";
 }
 function clrOut(){["on","ocr","oj","ow","osd"].forEach(function(id){document.getElementById(id).value="";}); document.getElementById("ores").style.display="none"; selMt=null; resetM();}
 
@@ -887,59 +984,75 @@ async function fetchPotentials(t,role,loc,skills) {
   return filterAndMap((d.d&&d.d.results)?d.d.results:[],role,loc,skills,"potential");
 }
 function filterAndMap(items,role,loc,skills,source) {
-  var rQ=role.toLowerCase(), lQ=loc.toLowerCase();
-  var skArr=skills?skills.split(",").map(function(s){return s.trim().toLowerCase();}).filter(Boolean):[];
+  var rQ    = role.toLowerCase().trim();
+  var lQ    = loc.toLowerCase().trim();
+  var skArr = skills ? skills.split(",").map(function(s){return s.trim().toLowerCase();}).filter(Boolean) : [];
 
   return items.filter(function(x){
-    // Build targeted search blob — only from relevant text fields, not IDs/numbers
     var mapped = getMappedFields(x, source);
-    var searchBlob = [mapped.name, mapped.title, mapped.location, mapped.notes||""].join(" ").toLowerCase();
-    var skillBlob  = [mapped.name, mapped.title, mapped.notes||"", mapped.email].join(" ").toLowerCase();
 
-    // Location: only match against location field specifically
-    var locBlob = mapped.location.toLowerCase();
+    // For role: search name, title, notes, AND all raw string values (catches unmapped fields)
+    var rawBlob = Object.keys(x).map(function(k){
+      var v = x[k];
+      // Skip numeric-only values and GUIDs — they are IDs, not searchable text
+      if (!v || typeof v !== "string") return "";
+      if (/^\d+$/.test(v)) return "";
+      if (/^[0-9a-f]{8}-[0-9a-f]{4}/i.test(v)) return "";
+      return v.toLowerCase();
+    }).join(" ");
 
-    var roleMatch  = !rQ || searchBlob.indexOf(rQ) >= 0;
-    var locMatch   = !lQ  || locBlob.indexOf(lQ) >= 0;
-    var skillMatch = skArr.length === 0 || skArr.every(function(sk){ return skillBlob.indexOf(sk) >= 0; });
+    var roleBlob = [mapped.name, mapped.title, mapped.notes, rawBlob].join(" ").toLowerCase();
+    var locBlob  = mapped.location.toLowerCase();
+    var skBlob   = [mapped.name, mapped.title, mapped.notes, rawBlob].join(" ").toLowerCase();
+
+    var roleMatch  = !rQ    || roleBlob.indexOf(rQ) >= 0;
+    var locMatch   = !lQ    || locBlob.indexOf(lQ)  >= 0;
+    var skillMatch = skArr.length === 0 || skArr.every(function(sk){ return skBlob.indexOf(sk) >= 0; });
 
     return roleMatch && locMatch && skillMatch;
   }).map(function(x){ return getMappedFields(x, source); });
 }
 
 function getMappedFields(x, source) {
-  // Potentials list uses known SPC column names
   if (source === "potential") {
     return {
-      name: x[SPC.name] || "Unknown",
-      email: x[SPC.email] || "",
-      phone: x[SPC.phone] || "",
-      linkedIn: x[SPC.url] || "",
-      resume: "",
-      title: x[SPC.role] || "",
+      name:     x[SPC.name]     || "Unknown",
+      email:    x[SPC.email]    || "",
+      phone:    x[SPC.phone]    || "",
+      linkedIn: x[SPC.url]      || "",
+      resume:   "",
+      title:    x[SPC.role]     || "",
       location: x[SPC.location] || "",
-      notes: x[SPC.notes] || "",
-      source: source
+      notes:    x[SPC.notes]    || "",
+      source:   source
     };
   }
-  // Official list — we don't yet know exact column names
-  // Try many possible name patterns, prefer non-numeric values
-  var fn = x.FirstName || x.first_name || "";
-  var ln = x.LastName || x.last_name || x.Title || "";
+  // Official SRFed Applicants Repository — confirmed field names from SharePoint XML
+  // field_31=First Name, field_19=Last Name, field_23=Email, field_16=Position
+  // field_26=City, field_27=State, field_35=Resume Link, field_30=Stage
+  var fn = x.field_31 || x.FirstName || "";
+  var ln = x.field_19 || x.LastName  || "";
   var fullName = (fn + " " + ln).trim();
-  // If name looks like a number, it's probably an ID field — mark as unknown
-  if (!fullName || /^\d+$/.test(fullName)) fullName = "(Name field unknown — see instructions)";
+  if (!fullName) fullName = "Unknown";
+
+  var city     = x.field_26 || x.City  || "";
+  var state    = x.field_27 || x.State || "";
+  var location = (city && state) ? city + ", " + state : (city || state || "");
+
+  // Resume link — field_35 may be a hyperlink object or string
+  var resumeRaw = x.field_35 || x.Resume_x0020_Link || "";
+  var resume = (resumeRaw && resumeRaw.Url) ? resumeRaw.Url : (typeof resumeRaw === "string" ? resumeRaw : "");
 
   return {
-    name: fullName,
-    email: x.Email || x.WorkEmail || x.email || "",
-    phone: x.WorkPhone || x.CellPhone || x.MobilePhone || x.PhoneNumber || "",
-    linkedIn: x.LinkedInURL || x.LinkedIn || x.LinkedInProfile || "",
-    resume: x.Resume_x0020_Link || x.ResumeLink || x.Resume || x.ResumeURL || "",
-    title: x.JobTitle || x.Position || x.AppliedPosition || x.CurrentPosition || "",
-    location: x.Location || x.State || x.WorkLocation || x.City || x.field_27 || "",
-    notes: x.Notes || x.Summary || "",
-    source: source
+    name:     fullName,
+    email:    x.field_23 || x.Email    || "",
+    phone:    x.WorkPhone || x.CellPhone || "",
+    linkedIn: x.LinkedInURL || "",
+    resume:   resume,
+    title:    x.field_16 || x.JobTitle || x.Position || "",
+    location: location,
+    notes:    x.field_30 || x.Notes    || "",
+    source:   source
   };
 }
 function renderLookup() {
