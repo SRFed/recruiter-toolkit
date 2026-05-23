@@ -473,14 +473,14 @@ input::placeholder,textarea::placeholder{color:var(--text4)}
       <div class="pills" id="lu-list-group" style="margin-top:8px">
         <button class="pill on" onclick="setLuList('applicants',this)">Official Applicant Repository</button>
         <button class="pill" onclick="setLuList('potentials',this)">Recruiting Potentials &mdash; Scratchpad</button>
-        <button class="pill" onclick="setLuList('both',this)">Both Lists</button>
+        <button class="pill" onclick="setLuList('both',this)" style="flex:1 1 100%;text-align:center">Both Lists</button>
       </div>
     </div>
   </div>
   <label>Search mode</label>
   <div class="pills" id="search-mode-group" style="margin-top:8px;margin-bottom:4px">
-    <button class="pill on" onclick="setSearchMode('literal',this)">&#128269; Literal</button>
-    <button class="pill" onclick="setSearchMode('ai',this)">&#10024; AI-Powered</button>
+    <button class="pill on" onclick="setSearchMode('literal',this)">&#128269; Keywords (Literal)</button>
+    <button class="pill" onclick="setSearchMode('ai',this)">&#10024; Inferred (AI-Powered)</button>
   </div>
   <p class="hint" id="search-mode-hint" style="margin-top:6px">Matches exact words and phrases across all available fields.</p>
   <div class="btn-row">
@@ -1045,7 +1045,7 @@ function setSearchMode(val,btn){
   btn.classList.add("on");
   var hint=document.getElementById("search-mode-hint");
   if(val==="literal"){
-    hint.textContent="Matches exact words and phrases across all available fields.";
+    hint.textContent="Matches exact keywords and phrases across all available fields.";
   } else {
     hint.textContent="Claude reads each record and infers fit based on skills, experience, and context — not just exact words. Uses your API key.";
   }
