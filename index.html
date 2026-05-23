@@ -505,7 +505,7 @@ var MCFG = {
   auth:{
     clientId:"d3414232-71e6-4018-aa5b-5a96cee86415",
     authority:"https://login.microsoftonline.com/32cb4d1a-0419-4f41-9884-3516ab14274e",
-    redirectUri:location.href.split("?")[0].split("#")[0]
+    redirectUri:"https://srfed.github.io/recruiter-toolkit/"
   },
   cache:{cacheLocation:"sessionStorage",storeAuthStateInCookie:true}
 };
@@ -525,12 +525,20 @@ window.addEventListener("load", async function(){
     MI = new msal.PublicClientApplication(MCFG);
     await MI.initialize();
     var r = await MI.handleRedirectPromise();
-    if (r && r.account) { MA = r.account; onMsIn(); }
-    else { var a = MI.getAllAccounts(); if (a.length > 0) { MA = a[0]; onMsIn(); } }
-  } catch(e) { console.warn("MSAL init:", e); }
+    if (r && r.account) {
+      MA = r.account;
+      onMsIn();
+    } else {
+      var a = MI.getAllAccounts();
+      if (a.length > 0) {
+        MA = a[0];
+        onMsIn();
+      }
+    }
+  } catch(e) {
+    console.warn("MSAL init:", e);
+  }
   renderC();
-  // If API key was already in session from a previous action, restore UI state
-  if (_apiKey && MA) { onApiKeySet(); }
 });
 
 // ── AUTH FLOW ────────────────────────────────────────────────────
@@ -543,26 +551,43 @@ async function toggleAuth() {
     onMsOut();
   } else {
     try {
-      var r = await MI.loginPopup({scopes:SPSC, prompt:"select_account"});
+      var r = await MI.loginPopup({
+        scopes: SPSC,
+        prompt: "select_account",
+        redirectUri: "https://srfed.github.io/recruiter-toolkit/"
+      });
       MA = r.account;
       onMsIn();
-    } catch(e) { if (e.errorCode !== "user_cancelled") toast("Sign-in failed"); }
+    } catch(e) {
+      if (e.errorCode !== "user_cancelled") {
+        console.error("Login error:", e);
+        toast("Sign-in failed: " + (e.errorMessage || e.message || e.errorCode));
+      }
+    }
   }
 }
 
 function onMsIn() {
   var name = MA.name || MA.username || "User";
   var initials = name.split(" ").map(function(w){return w[0]||"";}).join("").slice(0,2).toUpperCase();
-  // Update step 1
+  // Update step 1 UI
   document.getElementById("step1-pending").style.display = "none";
   document.getElementById("step1-done").style.display = "flex";
   document.getElementById("user-avatar").textContent = initials;
   document.getElementById("user-name").textContent = name;
-  // Show step 2 as active
-  document.getElementById("step2-pending").style.display = "none";
-  document.getElementById("step2-active").style.display = "flex";
-  // Check if API key already in session
-  if (_apiKey && _apiKey.length > 10) { onApiKeySet(); } else { unlockMsOnly(); }
+  // Re-read key from session in case it was saved before this page load
+  _apiKey = sessionStorage.getItem("srfed_api_key") || _apiKey || "";
+  if (_apiKey && _apiKey.length > 10) {
+    // Key exists — skip step 2 input, go straight to fully unlocked
+    document.getElementById("step2-pending").style.display = "none";
+    document.getElementById("step2-active").style.display = "none";
+    onApiKeySet();
+  } else {
+    // No key yet — show step 2 input
+    document.getElementById("step2-pending").style.display = "none";
+    document.getElementById("step2-active").style.display = "flex";
+    unlockMsOnly();
+  }
   loadC();
 }
 
@@ -651,7 +676,7 @@ function goTo(p) {
 // ── SHAREPOINT HELPERS ───────────────────────────────────────────
 async function getTok() {
   if (!MI||!MA) return null;
-  try { return (await MI.acquireTokenSilent({scopes:SPSC,account:MA})).accessToken; }
+  try { return (await MI.acquireTokenSilent({scopes:SPSC,account:MA,redirectUri:"https://srfed.github.io/recruiter-toolkit/"})).accessToken; }
   catch(e) { try { return (await MI.acquireTokenPopup({scopes:SPSC})).accessToken; } catch(e2) { toast("Could not get token"); return null; } }
 }
 async function getDig(t) {
