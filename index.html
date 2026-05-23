@@ -183,8 +183,9 @@ input::placeholder,textarea::placeholder{color:var(--text4)}
 .mbtn.sel{background:#dcfce7;border-color:#86efac;color:#15803d}
 
 /* TALENT LOOKUP TABLE */
-.lu-table{width:100%;border-collapse:collapse;background:#fff;border-radius:var(--radius-lg);overflow:hidden;box-shadow:var(--shadow);border:1.5px solid var(--border)}
-.lu-table th{background:var(--navy);color:#fff;font-size:12px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;padding:12px 16px;text-align:left;white-space:nowrap}
+.lu-table-wrap{max-height:70vh;overflow-y:auto;border-radius:var(--radius-lg);border:1.5px solid var(--border);box-shadow:var(--shadow)}
+.lu-table{width:100%;border-collapse:collapse;background:#fff;}
+.lu-table th{background:var(--navy);color:#fff;font-size:12px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;padding:12px 16px;text-align:left;white-space:nowrap;position:sticky;top:0;z-index:10;}
 .lu-table td{padding:12px 16px;font-size:14px;color:var(--text2);border-bottom:1px solid var(--border);vertical-align:top}
 .lu-table tr:last-child td{border-bottom:none}
 .lu-table tr:hover td{background:var(--surface2)}
@@ -580,17 +581,15 @@ function onMsIn() {
   // Re-read key from session in case it was saved before this page load
   _apiKey = sessionStorage.getItem("srfed_api_key") || _apiKey || "";
   if (_apiKey && _apiKey.length > 10) {
-    // Key exists — skip step 2 input, go straight to fully unlocked
     document.getElementById("step2-pending").style.display = "none";
     document.getElementById("step2-active").style.display = "none";
     onApiKeySet();
   } else {
-    // No key yet — show step 2 input
     document.getElementById("step2-pending").style.display = "none";
     document.getElementById("step2-active").style.display = "flex";
     unlockMsOnly();
   }
-  loadC();
+  loadC(); // fire immediately, don't block on UI
 }
 
 function onMsOut() {
@@ -620,8 +619,7 @@ function changeApiKey() {
   document.getElementById("step2-done").style.display = "none";
   document.getElementById("step2-active").style.display = "flex";
   document.getElementById("apikey-input").value = "";
-  document.getElementById("step3-done").style.display = "none";
-  document.getElementById("step3-pending").style.display = "flex";
+
   // Re-lock outreach only
   var el = document.getElementById("lock-outreach");
   if (el) el.style.display = "flex";
@@ -629,10 +627,12 @@ function changeApiKey() {
 }
 
 function onApiKeySet() {
-  document.getElementById("step2-active").style.display = "none";
-  document.getElementById("step2-done").style.display = "flex";
-  document.getElementById("step3-pending").style.display = "none";
-  document.getElementById("step3-done").style.display = "flex";
+  var s2p = document.getElementById("step2-pending");
+  var s2a = document.getElementById("step2-active");
+  var s2d = document.getElementById("step2-done");
+  if (s2p) s2p.style.display = "none";
+  if (s2a) s2a.style.display = "none";
+  if (s2d) s2d.style.display = "flex";
   unlockAll();
 }
 
@@ -662,9 +662,12 @@ function unlockMsOnly() {
 function unlockAll() {
   document.querySelectorAll(".nav-item").forEach(function(b){ b.classList.remove("locked"); });
   ["search","tracker","outreach","lookup"].forEach(function(p){
-    var el = document.getElementById("lock-"+p); if (el) el.style.display = "none";
+    var el = document.getElementById("lock-"+p);
+    if (el) { el.style.display = "none"; }
   });
-  goTo("search");
+  // Make sure current active panel is not covered
+  var active = document.querySelector(".panel.active");
+  if (!active) { goTo("search"); }
 }
 
 // ── NAVIGATION ───────────────────────────────────────────────────
@@ -870,7 +873,7 @@ async function runLookup() {
   renderLookup();
 }
 async function fetchApplicants(t,role,loc,skills) {
-  var url=SPS+"/_api/web/lists/getbytitle('SRFed Applicants Repository')/items?$top=2000";
+  var url=SPS+"/_api/web/lists/getbytitle('SRFed Applicants Repository')/items?$top=2000&$select=Id,field_31,field_19,field_23,field_b,field_16,field_26,field_27,field_35,field_30,field_22";
   var r=await fetch(url,{headers:{"Authorization":"Bearer "+t,"Accept":"application/json;odata=verbose"}});
   if (!r.ok) throw new Error("Cannot access SRFed Applicants Repository (HTTP "+r.status+"). Check permissions.");
   var d=await r.json();
@@ -886,23 +889,58 @@ async function fetchPotentials(t,role,loc,skills) {
 function filterAndMap(items,role,loc,skills,source) {
   var rQ=role.toLowerCase(), lQ=loc.toLowerCase();
   var skArr=skills?skills.split(",").map(function(s){return s.trim().toLowerCase();}).filter(Boolean):[];
+
   return items.filter(function(x){
-    var blob=Object.values(x).map(function(v){return(v&&typeof v==="string")?v.toLowerCase():"";}).join(" ");
-    return(!rQ||blob.indexOf(rQ)>=0)&&(!lQ||blob.indexOf(lQ)>=0)&&(skArr.length===0||skArr.every(function(sk){return blob.indexOf(sk)>=0;}));
-  }).map(function(x){
-    var fn=x.FirstName||"", ln=x.LastName||x.Title||"";
-    var name=(fn+" "+ln).trim()||x.Title||"Unknown";
+    // Build targeted search blob — only from relevant text fields, not IDs/numbers
+    var mapped = getMappedFields(x, source);
+    var searchBlob = [mapped.name, mapped.title, mapped.location, mapped.notes||""].join(" ").toLowerCase();
+    var skillBlob  = [mapped.name, mapped.title, mapped.notes||"", mapped.email].join(" ").toLowerCase();
+
+    // Location: only match against location field specifically
+    var locBlob = mapped.location.toLowerCase();
+
+    var roleMatch  = !rQ || searchBlob.indexOf(rQ) >= 0;
+    var locMatch   = !lQ  || locBlob.indexOf(lQ) >= 0;
+    var skillMatch = skArr.length === 0 || skArr.every(function(sk){ return skillBlob.indexOf(sk) >= 0; });
+
+    return roleMatch && locMatch && skillMatch;
+  }).map(function(x){ return getMappedFields(x, source); });
+}
+
+function getMappedFields(x, source) {
+  // Potentials list uses known SPC column names
+  if (source === "potential") {
     return {
-      name:name,
-      email:x.Email||x.WorkEmail||"",
-      phone:x.WorkPhone||x.CellPhone||x.PhoneNumber||x[SPC.phone]||"",
-      linkedIn:x.LinkedInURL||x.LinkedIn||x[SPC.url]||"",
-      resume:x.Resume_x0020_Link||x.ResumeLink||x.Resume||"",
-      title:x.JobTitle||x.Position||x.AppliedPosition||x[SPC.role]||"",
-      location:x.Location||x.City||x.State||x.WorkLocation||x[SPC.location]||x.field_27||"",
-      source:source
+      name: x[SPC.name] || "Unknown",
+      email: x[SPC.email] || "",
+      phone: x[SPC.phone] || "",
+      linkedIn: x[SPC.url] || "",
+      resume: "",
+      title: x[SPC.role] || "",
+      location: x[SPC.location] || "",
+      notes: x[SPC.notes] || "",
+      source: source
     };
-  });
+  }
+  // Official list — we don't yet know exact column names
+  // Try many possible name patterns, prefer non-numeric values
+  var fn = x.FirstName || x.first_name || "";
+  var ln = x.LastName || x.last_name || x.Title || "";
+  var fullName = (fn + " " + ln).trim();
+  // If name looks like a number, it's probably an ID field — mark as unknown
+  if (!fullName || /^\d+$/.test(fullName)) fullName = "(Name field unknown — see instructions)";
+
+  return {
+    name: fullName,
+    email: x.Email || x.WorkEmail || x.email || "",
+    phone: x.WorkPhone || x.CellPhone || x.MobilePhone || x.PhoneNumber || "",
+    linkedIn: x.LinkedInURL || x.LinkedIn || x.LinkedInProfile || "",
+    resume: x.Resume_x0020_Link || x.ResumeLink || x.Resume || x.ResumeURL || "",
+    title: x.JobTitle || x.Position || x.AppliedPosition || x.CurrentPosition || "",
+    location: x.Location || x.State || x.WorkLocation || x.City || x.field_27 || "",
+    notes: x.Notes || x.Summary || "",
+    source: source
+  };
 }
 function renderLookup() {
   document.getElementById("lu-count").textContent=luResults.length+" result"+(luResults.length!==1?"s":"")+" found";
@@ -915,7 +953,7 @@ function renderLookup() {
     var resLink=c.resume?'<a class="lu-link" href="'+esc(c.resume)+'" target="_blank">Resume</a>':'<span style="color:var(--text4)">&#8212;</span>';
     return "<tr><td>"+srcTag+"</td><td><strong>"+esc(c.name)+"</strong>"+(c.title?"<br><span style=\"font-size:13px;color:var(--text3)\">"+esc(c.title)+"</span>":"")+"</td><td>"+esc(c.location)+"</td><td>"+(c.email?'<a class="lu-link" href="mailto:'+esc(c.email)+'">'+esc(c.email)+"</a>":"&#8212;")+"</td><td>"+esc(c.phone)+"</td><td>"+liLink+"</td><td>"+resLink+"</td></tr>";
   }).join("");
-  out.innerHTML='<table class="lu-table"><thead><tr><th>Source</th><th>Name / Title</th><th>Location</th><th>Email</th><th>Phone</th><th>LinkedIn</th><th>Resume</th></tr></thead><tbody>'+rows+'</tbody></table>';
+  out.innerHTML='<div class="lu-table-wrap"><table class="lu-table"><thead><tr><th>Source</th><th>Name / Title</th><th>Location</th><th>Email</th><th>Phone</th><th>LinkedIn</th><th>Resume</th></tr></thead><tbody>'+rows+'</tbody></table></div>';
 }
 function clearLookup(){["lu-role","lu-location","lu-skills"].forEach(function(id){document.getElementById(id).value="";}); _luList="both"; document.querySelectorAll("#lu-list-group .pill").forEach(function(b){b.classList.remove("on");}); document.querySelector("#lu-list-group .pill").classList.add("on"); document.getElementById("lu-results").style.display="none"; luResults=[];}
 function exportLookupCSV(){
