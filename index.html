@@ -457,8 +457,8 @@ input::placeholder,textarea::placeholder{color:var(--text4)}
       <p class="hint">Searches names, titles, and notes for matches.</p>
     </div>
     <div>
-      <label>Location / state</label>
-      <input type="text" id="lu-location" placeholder="e.g. Virginia, VA, Washington DC"/>
+      <label>State (two-letter abbreviation)</label>
+      <input type="text" id="lu-location" placeholder="e.g. VA, MD, DC"/>
       <p class="hint">Partial match &mdash; "VA" will match Virginia.</p>
     </div>
   </div>
@@ -998,16 +998,19 @@ function filterAndMap(items,role,loc,skills,source) {
   return items.filter(function(x){
     // Build a text blob from ALL string values in the record for searching
     var allText = "";
+    // Stage fields (field_30, field_31) contain status like "Rejected","Onboarded"
+    // Exclude them from role search so status doesn't contaminate results
+    var skipFields = {field_30:1, field_31:1};
     for (var k in x) {
+      if (skipFields[k]) continue;
       var v = x[k];
       if (!v) continue;
       if (typeof v === "string" && v.length > 1 && v.length < 500) {
-        // Skip odata metadata strings
         if (v.indexOf("SP.Data") >= 0) continue;
         if (v.indexOf("/_api/") >= 0) continue;
+        if (/^[0-9a-f]{8}-[0-9a-f]{4}/i.test(v)) continue; // skip GUIDs
         allText += " " + v.toLowerCase();
       } else if (typeof v === "object" && !Array.isArray(v)) {
-        // Recursively extract all string values from SharePoint field objects
         for (var ok in v) {
           var ov = v[ok];
           if (ov && typeof ov === "string" && ov.length > 1 && ov.length < 200) {
@@ -1083,9 +1086,24 @@ function getMappedFields(x, source) {
     }
     return String(v);
   }
-  var fn       = fieldStr(x.field_31);
-  var ln       = fieldStr(x.field_19);
-  var fullName = (fn + " " + ln).trim() || "Unknown";
+  // field_31 = Stage (NOT First Name) - confirmed from search results
+  // field_19 = Last Name - confirmed
+  // First Name field number unknown - try common patterns
+  var fn = fieldStr(x.FirstName) || 
+           fieldStr(x.field_32)  || 
+           fieldStr(x.field_33)  || 
+           fieldStr(x.field_34)  || 
+           fieldStr(x.field_36)  || 
+           fieldStr(x.field_37)  || "";
+  var ln = fieldStr(x.field_19) || fieldStr(x.LastName) || "";
+  var fullName = (fn + " " + ln).trim() || ln || "Unknown";
+  // Debug: log first record's keys to console to identify First Name field
+  if (!getMappedFields._logged) {
+    getMappedFields._logged = true;
+    var keys = Object.keys(x).filter(function(k){ return k.indexOf("field_") === 0; }).sort();
+    console.log("SRFed Applicants Repository field keys:", keys);
+    console.log("Sample record values:", keys.slice(0,20).map(function(k){ return k + "=" + JSON.stringify(x[k]); }).join(", "));
+  }
   var city     = fieldStr(x.field_26);
   var state    = fieldStr(x.field_27);
   var location = city && state ? city + ", " + state : (city || state || "");
