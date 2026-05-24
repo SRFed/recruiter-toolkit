@@ -1356,48 +1356,92 @@ function renderLookup() {
 
 function renderLookupTable() {
   var out = document.getElementById("lu-list-output");
+  if (!out) return;
+
   // Apply column filters
   var filtered = luResults.filter(function(c) {
     return LU_COLS.every(function(col, i) {
       var fval = (_luFilters[i]||"").toLowerCase().trim();
       if (!fval) return true;
-      return getLuCell(c,col).toLowerCase().indexOf(fval) >= 0;
+      return getLuCell(c, col).toLowerCase().indexOf(fval) >= 0;
     });
   });
+
   // Apply sort
   if (_luSort.col >= 0) {
-    var sortCol = LU_COLS[_luSort.col];
-    var sortDir = _luSort.dir;
-    filtered = filtered.slice().sort(function(a,b){
-      var av=getLuCell(a,sortCol).toLowerCase();
-      var bv=getLuCell(b,sortCol).toLowerCase();
-      return av<bv?-sortDir:av>bv?sortDir:0;
+    var sc = LU_COLS[_luSort.col];
+    var sd = _luSort.dir;
+    filtered = filtered.slice().sort(function(a, b) {
+      var av = getLuCell(a, sc).toLowerCase();
+      var bv = getLuCell(b, sc).toLowerCase();
+      return av < bv ? -sd : av > bv ? sd : 0;
     });
   }
-  document.getElementById("lu-count").textContent = filtered.length+" result"+(filtered.length!==1?"s":"")+" found"+
-    (filtered.length<luResults.length?" ("+luResults.length+" total, filtered)":"");
-  // Headers with sort indicators and resize handles
-  var headerCells = LU_LABELS.map(function(label,i){
-    var cls=_luSort.col===i?(_luSort.dir===1?"sort-asc":"sort-desc"):"";
-    return '<th class="'+cls+'" style="width:'+_luColWidths[i]+'px;min-width:'+_luColWidths[i]+'px" onclick="luSortBy('+i+')">'+label+' <i class="sort-icon"></i><span class="col-resize" onclick="event.stopPropagation()"></span></th>';
-  }).join("");
-  // Filter inputs row — widths locked to same as header
-  var filterCells = LU_COLS.map(function(col,i){
-    var val=_luFilters[i]||"";
-    return '<th style="width:'+_luColWidths[i]+'px;min-width:'+_luColWidths[i]+'px"><input class="lu-filter-input" type="text" placeholder="Filter..." value="'+esc(val)+'" oninput="luFilter('+i+',this.value)"/></th>';
-  }).join("");
-  // Data rows
-  var rows = filtered.map(function(c){
-    var srcTag=c.source==="official"?'<span class="lu-source-tag official">Applicant</span>':'<span class="lu-source-tag potential">Potential</span>';
-    var stageHtml=c.stage?'<br><span style="font-size:11px;color:var(--text4);font-style:italic">'+esc(c.stage)+"</span>":"";
-    var emailCell=c.email?'<a class="lu-link" href="mailto:'+esc(c.email)+'">'+esc(c.email)+"</a>":"&#8212;";
-    var liCell=c.linkedIn?'<a class="lu-link" href="'+(c.linkedIn.indexOf("http")===0?esc(c.linkedIn):"https://"+esc(c.linkedIn))+'" target="_blank">LinkedIn</a>':"&#8212;";
-    var resCell=c.resume?'<a class="lu-link" href="'+esc(c.resume)+'" target="_blank">Resume</a>':"&#8212;";
-    return "<tr><td>"+srcTag+stageHtml+"</td><td><strong>"+esc(c.name)+"</strong>"+(c.title?'<br><span style="font-size:12px;color:var(--text3)">'+esc(c.title)+"</span>":"")+
-      "</td><td>"+esc(c.location)+"</td><td>"+emailCell+"</td><td>"+esc(c.phone)+"</td><td>"+liCell+"</td><td>"+resCell+"</td></tr>";
-  }).join("");
-  out.innerHTML='<div class="lu-table-wrap"><table class="lu-table"><thead><tr>'+headerCells+'</tr><tr class="lu-filter-row">'+filterCells+'</tr></thead><tbody>'+rows+'</tbody></table></div>';
+
+  document.getElementById("lu-count").textContent = filtered.length + " result" +
+    (filtered.length !== 1 ? "s" : "") + " found" +
+    (filtered.length < luResults.length ? " (" + luResults.length + " total, filtered)" : "");
+
+  // Build header row
+  var hdr = "";
+  for (var i = 0; i < LU_LABELS.length; i++) {
+    var cls = _luSort.col === i ? (_luSort.dir === 1 ? "sort-asc" : "sort-desc") : "";
+    var w = _luColWidths[i];
+    hdr += '<th class="' + cls + '" style="width:' + w + 'px;min-width:' + w + 'px" onclick="luSortBy(' + i + ')">' +
+      LU_LABELS[i] + ' <i class="sort-icon"></i>' +
+      '<span class="col-resize" onclick="event.stopPropagation()"></span></th>';
+  }
+
+  // Build filter row
+  var frow = "";
+  for (var j = 0; j < LU_COLS.length; j++) {
+    var fval2 = _luFilters[j] || "";
+    var w2 = _luColWidths[j];
+    frow += '<th style="width:' + w2 + 'px;min-width:' + w2 + 'px">' +
+      '<input class="lu-filter-input" type="text" placeholder="Filter..." value="' + esc(fval2) + '"' +
+      ' oninput="luFilter(' + j + ',this.value)"/></th>';
+  }
+
+  // Build data rows
+  var body = "";
+  for (var k = 0; k < filtered.length; k++) {
+    var c = filtered[k];
+    try {
+      var srcTag = c.source === "official"
+        ? '<span class="lu-source-tag official">Applicant</span>'
+        : '<span class="lu-source-tag potential">Potential</span>';
+      var stageHtml = c.stage ? '<br><span style="font-size:11px;color:var(--text4);font-style:italic">' + esc(c.stage) + '</span>' : "";
+      var emailCell = c.email ? '<a class="lu-link" href="mailto:' + esc(c.email) + '">' + esc(c.email) + '</a>' : "&#8212;";
+      var liRaw = c.linkedIn || "";
+      var liCell = liRaw ? '<a class="lu-link" href="' + (liRaw.indexOf("http") === 0 ? esc(liRaw) : "https://" + esc(liRaw)) + '" target="_blank">LinkedIn</a>' : "&#8212;";
+      var resCell = c.resume ? '<a class="lu-link" href="' + esc(c.resume) + '" target="_blank">Resume</a>' : "&#8212;";
+      var titleHtml = c.title ? '<br><span style="font-size:12px;color:var(--text3)">' + esc(c.title) + '</span>' : "";
+      body += "<tr>" +
+        "<td>" + srcTag + stageHtml + "</td>" +
+        "<td><strong>" + esc(c.name) + "</strong>" + titleHtml + "</td>" +
+        "<td>" + esc(c.location) + "</td>" +
+        "<td>" + emailCell + "</td>" +
+        "<td>" + esc(c.phone) + "</td>" +
+        "<td>" + liCell + "</td>" +
+        "<td>" + resCell + "</td>" +
+        "</tr>";
+    } catch(rowErr) {
+      console.warn("Row render error at index " + k + ":", rowErr);
+    }
+  }
+
+  out.innerHTML = '<div class="lu-table-wrap">' +
+    '<table class="lu-table">' +
+    '<thead>' +
+    '<tr>' + hdr + '</tr>' +
+    '<tr class="lu-filter-row">' + frow + '</tr>' +
+    '</thead>' +
+    '<tbody>' + body + '</tbody>' +
+    '</table></div>';
+
+  setTimeout(initLuTableResize, 0);
 }
+
 
 function getLuCell(c,col){
   if(col==="source")   return c.source==="official"?"Applicant":"Potential";
