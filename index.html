@@ -185,7 +185,7 @@ input::placeholder,textarea::placeholder{color:var(--text4)}
 
 /* TALENT LOOKUP TABLE */
 .lu-table-wrap{max-height:65vh;overflow-x:auto;overflow-y:auto;border-radius:var(--radius-lg);border:1.5px solid var(--border);box-shadow:var(--shadow)}
-.lu-table{width:100%;border-collapse:collapse;background:#fff}
+.lu-table{width:100%;border-collapse:collapse;background:#fff;table-layout:fixed}
 .lu-table th{background:var(--navy);color:#fff;font-size:12px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;padding:10px 16px;text-align:left;white-space:nowrap;position:sticky;top:0;z-index:10;cursor:pointer;user-select:none}
 .lu-table th:hover{background:#1a3060}
 .lu-table th .sort-icon{margin-left:5px;opacity:0.5;font-style:normal;font-size:11px}
@@ -197,7 +197,7 @@ input::placeholder,textarea::placeholder{color:var(--text4)}
 .lu-filter-row th{background:#f0f4ff;position:sticky;top:41px;z-index:9;padding:5px 8px}
 .lu-filter-input{width:100%;font-size:12px;padding:4px 8px;border:1px solid var(--border);border-radius:4px;font-family:"Inter",sans-serif;background:#fff;color:var(--text);outline:none;box-sizing:border-box}
 .lu-filter-input:focus{border-color:var(--blue2)}
-.lu-table td{padding:10px 16px;font-size:14px;color:var(--text2);border-bottom:1px solid var(--border);vertical-align:middle}
+.lu-table td{padding:10px 16px;font-size:14px;color:var(--text2);border-bottom:1px solid var(--border);vertical-align:middle;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .lu-table tr:last-child td{border-bottom:none}
 .lu-table tr:hover td{background:var(--surface2)}
 .lu-source-tag{display:inline-block;font-size:10px;font-weight:600;padding:2px 7px;border-radius:10px;letter-spacing:.05em;text-transform:uppercase}
@@ -546,22 +546,21 @@ function onLuResizeMove(e) {
   var dx = e.clientX - _luResizing.startX;
   var newW = Math.max(60, _luResizing.startW + dx);
   _luColWidths[_luResizing.colIdx] = newW;
-  // Apply width to both header rows (sort row + filter row)
+  // With table-layout:fixed, only need to update the col element
   var table = document.querySelector(".lu-table");
   if (!table) return;
+  var cols = table.querySelectorAll("col");
+  if (cols[_luResizing.colIdx]) {
+    cols[_luResizing.colIdx].style.width = newW + "px";
+  }
+  // Also update th widths for the resize handle positioning
   var allRows = table.querySelectorAll("thead tr");
   allRows.forEach(function(row) {
     var cells = row.querySelectorAll("th");
     if (cells[_luResizing.colIdx]) {
       cells[_luResizing.colIdx].style.width = newW + "px";
-      cells[_luResizing.colIdx].style.minWidth = newW + "px";
     }
   });
-  // Apply to colgroup if present
-  var cols = table.querySelectorAll("col");
-  if (cols[_luResizing.colIdx]) {
-    cols[_luResizing.colIdx].style.width = newW + "px";
-  }
 }
 
 function onLuResizeUp() {
@@ -1381,7 +1380,13 @@ function renderLookupTable() {
     (filtered.length < luResults.length ? " (" + luResults.length + " total, filtered)" : "");
 
   // Build table as a string — simple and direct
-  var t = '<div class="lu-table-wrap"><table class="lu-table">';
+  // Build colgroup to lock column widths
+  var cg = '<colgroup>';
+  for (var ci = 0; ci < _luColWidths.length; ci++) {
+    cg += '<col style="width:' + _luColWidths[ci] + 'px">';
+  }
+  cg += '</colgroup>';
+  var t = '<div class="lu-table-wrap"><table class="lu-table">' + cg;
 
   // Header row
   t += '<thead><tr>';
