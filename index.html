@@ -3050,6 +3050,7 @@
         <button onclick="resetSettings()" style="padding:8px 16px;font-size:13px;border:1px solid var(--border);border-radius:6px;background:white;cursor:pointer;color:var(--muted)">↺ Reset to Defaults</button>
       </div>
       <div id="settingsSavedMsg" style="display:none;margin-top:10px;padding:8px 14px;background:var(--success-bg);border:1px solid #86efac;border-radius:6px;font-size:13px;color:var(--success)">✅ Settings saved successfully.</div>
+      <div id="appVersionFooter" style="margin-top:24px;padding-top:14px;border-top:1px solid var(--border);text-align:center;font-size:11px;color:var(--muted)">Sales Tool &middot; Version <span id="appVersionText">—</span></div>
     </div>
   </div>
 </div>
@@ -3069,6 +3070,12 @@ const WORKERS_SUBDOMAIN = 'srfed-svc';
 // you pick in Settings (which is populated live from Anthropic's models API, so it
 // always reflects what actually exists). The value here is only the initial default.
 let CLAUDE_MODEL = 'claude-sonnet-4-6';
+
+// ── App version ───────────────────────────────────────────────────────────────
+// Single source of truth for the build number shown in the Settings footer.
+// Bump this by 1 on every deploy. Rendered into #appVersionText on load, so you
+// can confirm which build is live by searching page source for "Version 108".
+const APP_VERSION = '108';
 
 // Compute the loaded-cost wrap factor from the configured rate components.
 // 'compounded' nests each rate on the running subtotal (the DCAA-style buildup);
@@ -18099,6 +18106,7 @@ window.addEventListener('load', () => {
   window._bootBrandColors = { primary: CLIENT_CONFIG.primaryColor, secondary: CLIENT_CONFIG.secondaryColor };
   applyClientConfig();
   loadSettingsIntoUI();
+  try { const _v = document.getElementById('appVersionText'); if (_v) _v.textContent = APP_VERSION; } catch (e) {}
   initMsal();
   initScrollContainment();
   if (window.Rec && Rec.renderMeetGrid) Rec.renderMeetGrid();
