@@ -15051,9 +15051,14 @@ async function runBidNoBid() {
       `- Use only plain ASCII. No em-dashes, no smart quotes.\n` +
       `- JSON shape: {"data_confidence":"...","factors":{"technical_capability":{"score":N,"rationale":"..."}, ...5 more...},"opportunity":{"required_clearance":"","fte_count":"","set_aside":"","required_dcaa":false,"prime_eligible":true,"prime_ineligibility_reason":"","contract_vehicle":"the NAME of the contract vehicle the work is ordered under (e.g. SEWP V, OASIS+, GSA MAS, CIO-SP4) - a PROPER NAME, not a type/structure; do NOT put IDIQ, MATOC, BPA, GWAC, FFP, or T&M; use N/A if open-market or if this opportunity is itself establishing a vehicle","vehicle_is_open":true,"estimated_value":"","required_cmmc":"","required_iso":""},"scope_coverage":N,"risks":[...],"win_strategy":[...],"summary":"..."}\n` +
       `- Always complete the full JSON — do not stop after factors.\n\n` +
-      `Respond with ONLY the completed JSON. No markdown. No preamble.`
+      `Respond with ONLY the completed JSON object, starting with { and ending with }. No markdown, no code fences, no preamble, no commentary before or after the JSON.`
     });
 
+    // NOTE: do NOT use assistant-message prefill here — not all current/future models accept it
+    // ("This model does not support assistant message prefill"), and this call must work across
+    // whatever model is selected in Settings -> AI Model. Instead, the prompt above instructs
+    // Claude to return ONLY the JSON object, and the tolerant parse/sanitize pipeline below
+    // (same pattern used by extractOpportunityIntel/parseLooseJson) handles any stray formatting.
     const resp = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'x-api-key': apiKey,
@@ -15063,17 +15068,13 @@ async function runBidNoBid() {
         max_tokens: 8000,
         temperature: 0,
         messages: [
-          { role: 'user', content },
-          // Prefill forces Claude to complete THIS JSON with real content — cannot echo a template
-          { role: 'assistant', content: `{"data_confidence":"${hasCompanyDocs ? 'HIGH' : 'LOW'}","factors":{` }
+          { role: 'user', content }
         ]
       })
     });
     if (!resp.ok) throw new Error(`API error ${resp.status}: ${await resp.text().catch(()=>'')}`);
     const d = await resp.json();
-    // Prepend the assistant prefill so we have a complete JSON object
-    let raw = `{"data_confidence":"${hasCompanyDocs ? 'HIGH' : 'LOW'}","factors":{` +
-      d.content.map(c=>c.text||'').join('').trim()
+    let raw = d.content.map(c=>c.text||'').join('').trim()
         .replace(/^```json\s*/i,'').replace(/^```\s*/i,'').replace(/\s*```$/,'').trim()
         .replace(/^#+\s+[^\n]*\n/gm, '').trim();
 
